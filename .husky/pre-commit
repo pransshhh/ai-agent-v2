@@ -1,0 +1,12 @@
+#!/bin/sh
+
+# block unsupported lockfiles
+for file in "package-lock.json" "yarn.lock" "bun.lockb"; do
+  if git diff --cached --name-only | grep -q "$file"; then
+    echo "❌ Error: Do not commit '$file'. Use only 'pnpm-lock.yaml'."
+    exit 1
+  fi
+done
+
+# run biome check on staged files
+pnpm check:staged
