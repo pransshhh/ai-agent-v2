@@ -1,0 +1,19 @@
+{
+  "name": "@repo/zod",
+  "private": true,
+  "scripts": {
+    "clean": "rimraf node_modules"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./auth": "./src/auth/index.ts",
+    "./common": "./src/common/index.ts"
+  },
+  "dependencies": {
+    "zod": "^3.22.3"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "typescript": "^6.0.2"
+  }
+}
