@@ -10,6 +10,8 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "clean": "turbo run clean && rimraf node_modules",
+    "db:start": "docker compose -f apps/api/docker-compose.yaml up -d",
+    "db:stop": "docker compose -f apps/api/docker-compose.yaml down",
     "prepare": "husky"
   },
   "devDependencies": {
