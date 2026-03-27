@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: ai-dev-agent-postgres
+    container_name: ai-agent-db
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_NAME}
