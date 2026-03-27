@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
+    "gen": "turbo run gen",
     "lint": "biome check .",
     "format": "biome check . --write",
     "check:staged": "biome check --staged",

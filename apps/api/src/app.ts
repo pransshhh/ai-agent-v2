@@ -1,3 +1,4 @@
+import path from "node:path";
 import { toNodeHandler } from "better-auth/node";
 import cors from "cors";
 import express, { type Express } from "express";
@@ -19,6 +20,8 @@ export const createApp = (): Express => {
   app.all("/api/auth/*splat", toNodeHandler(auth));
 
   app.use(express.json());
+
+  app.use("/static", express.static(path.join(__dirname, "..", "static")));
 
   app.use(errorHandler);
 
