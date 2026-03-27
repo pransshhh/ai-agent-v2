@@ -1,5 +1,7 @@
 import cors from "cors";
 import express from "express";
+import { env } from "./config/env.js";
+import { logger } from "./lib/logger.js";
 
 const app = express();
 
@@ -14,8 +16,6 @@ app.get("/health", (_, res) => {
   res.json({ status: "ok" });
 });
 
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log(`API running on port: ${PORT}`);
+app.listen(env.PORT, () => {
+  logger.info({ port: env.PORT }, "API running");
 });
