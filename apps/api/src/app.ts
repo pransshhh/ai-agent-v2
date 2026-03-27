@@ -3,6 +3,7 @@ import cors from "cors";
 import express, { type Express } from "express";
 import { env } from "./config/env";
 import { auth } from "./lib/auth";
+import { errorHandler } from "./middleware/error";
 
 export const createApp = (): Express => {
   const app = express();
@@ -18,6 +19,8 @@ export const createApp = (): Express => {
   app.all("/api/auth/*splat", toNodeHandler(auth));
 
   app.use(express.json());
+
+  app.use(errorHandler);
 
   return app;
 };

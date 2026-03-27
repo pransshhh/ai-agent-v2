@@ -18,7 +18,13 @@ export const ZSendOtpRequest = z.object({
   name: z.string().min(2).max(100).optional()
 });
 
-export const ZVerifyOtpRequest = z.object({
+export const ZVerifySignupOtpRequest = z.object({
+  email: z.string().email(),
+  otp: z.string().length(6),
+  name: z.string().min(2).max(100)
+});
+
+export const ZVerifySigninOtpRequest = z.object({
   email: z.string().email(),
   otp: z.string().length(6)
 });
@@ -26,4 +32,5 @@ export const ZVerifyOtpRequest = z.object({
 export type User = z.infer<typeof ZUser>;
 export type AuthResponse = z.infer<typeof ZAuthResponse>;
 export type SendOtpRequest = z.infer<typeof ZSendOtpRequest>;
-export type VerifyOtpRequest = z.infer<typeof ZVerifyOtpRequest>;
+export type VerifySignupOtpRequest = z.infer<typeof ZVerifySignupOtpRequest>;
+export type VerifySigninOtpRequest = z.infer<typeof ZVerifySigninOtpRequest>;

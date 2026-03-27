@@ -4,7 +4,8 @@ import {
   ZSendOtpRequest,
   ZSuccessResponse,
   ZUser,
-  ZVerifyOtpRequest
+  ZVerifySigninOtpRequest,
+  ZVerifySignupOtpRequest
 } from "@repo/zod";
 import { initContract } from "@ts-rest/core";
 import { getSecurityMetadata } from "../utils";
@@ -28,7 +29,7 @@ export const authContract = c.router(
       summary: "Verify OTP and create account",
       method: "POST",
       path: "/signup/verify",
-      body: ZVerifyOtpRequest,
+      body: ZVerifySignupOtpRequest,
       responses: {
         201: ZAuthResponse,
         400: ZErrorResponse
@@ -48,7 +49,7 @@ export const authContract = c.router(
       summary: "Verify OTP and signin",
       method: "POST",
       path: "/signin/verify",
-      body: ZVerifyOtpRequest,
+      body: ZVerifySigninOtpRequest,
       responses: {
         200: ZAuthResponse,
         400: ZErrorResponse
