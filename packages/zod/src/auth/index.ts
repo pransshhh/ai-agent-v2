@@ -17,19 +17,39 @@ export const ZAuthResponse = z.object({
 });
 
 export const ZSendOtpRequest = z.object({
-  email: z.email().openapi({ example: "john@example.com" }),
-  name: z.string().min(2).max(100).optional()
+  email: z
+    .email("Please enter a valid email address")
+    .openapi({ example: "john@example.com" }),
+  name: z
+    .string()
+    .min(2, "Name must be at least 2 characters long")
+    .max(100, "Name must be at most 100 characters long")
+    .optional()
 });
 
 export const ZVerifySignupOtpRequest = z.object({
-  email: z.email(),
-  otp: z.string().length(6).openapi({ example: "123456" }),
-  name: z.string().min(2).max(100)
+  email: z
+    .email("Please enter a valid email address")
+    .openapi({ example: "john@example.com" }),
+  otp: z
+    .string()
+    .length(6, "OTP must be 6 digits long")
+    .openapi({ example: "123456" }),
+  name: z
+    .string()
+    .min(2, "Name must be at least 2 characters long")
+    .max(100, "Name must be at most 100 characters long")
+    .openapi({ example: "John Doe" })
 });
 
 export const ZVerifySigninOtpRequest = z.object({
-  email: z.email(),
-  otp: z.string().length(6).openapi({ example: "123456" })
+  email: z
+    .email("Please enter a valid email address")
+    .openapi({ example: "john@example.com" }),
+  otp: z
+    .string()
+    .length(6, "OTP must be 6 digits long")
+    .openapi({ example: "123456" })
 });
 
 export type User = z.infer<typeof ZUser>;

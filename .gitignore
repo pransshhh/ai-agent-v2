@@ -2,6 +2,9 @@
 node_modules
 .pnp
 .pnp.js
+dist
+dist-ssr
+*.local
 
 # Local env files
 .env
@@ -9,6 +12,15 @@ node_modules
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # Testing
 coverage
@@ -21,6 +33,7 @@ coverage
 
 # Build Outputs
 .next/
+.tanstack/
 out/
 build
 dist
@@ -41,6 +54,11 @@ lerna-debug.log*
 .DS_Store
 *.pem
 *.log
-
-# Static generated files
-apps/api/static/openapi.json
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
