@@ -10,7 +10,8 @@
     "./common": "./src/common/index.ts"
   },
   "dependencies": {
-    "zod": "^3.22.3"
+    "@asteasolutions/zod-to-openapi": "^8.5.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",

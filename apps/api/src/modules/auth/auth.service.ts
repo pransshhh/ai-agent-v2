@@ -3,7 +3,7 @@ import type {
   SendOtpRequest,
   VerifySigninOtpRequest,
   VerifySignupOtpRequest
-} from "@repo/zod";
+} from "@repo/zod/auth";
 import type { fromNodeHeaders } from "better-auth/node";
 import { auth } from "../../lib/auth";
 import { AppError } from "../../middleware/error";
@@ -22,15 +22,16 @@ export const authService = {
   },
 
   async verifySignupOtp({ email, otp, name }: VerifySignupOtpRequest) {
-    const result = await auth.api
+    const response = await auth.api
       .signInEmailOTP({
-        body: { email, otp, name }
+        body: { email, otp, name },
+        asResponse: true
       })
       .catch(() => {
         throw new AppError("Invalid or expired OTP", 400, "INVALID_OTP");
       });
 
-    return { user: result.user };
+    return response;
   },
 
   async sendSigninOtp({ email }: Pick<SendOtpRequest, "email">) {
@@ -46,25 +47,24 @@ export const authService = {
   },
 
   async verifySigninOtp({ email, otp }: VerifySigninOtpRequest) {
-    const result = await auth.api
+    const existing = await db.user.findUnique({ where: { email } });
+    if (!existing)
+      throw new AppError("No account found", 404, "USER_NOT_FOUND");
+
+    const response = await auth.api
       .signInEmailOTP({
-        body: { email, otp }
+        body: { email, otp },
+        asResponse: true
       })
       .catch(() => {
         throw new AppError("Invalid or expired OTP", 400, "INVALID_OTP");
       });
 
-    return { user: result.user };
+    return response;
   },
 
   async signout(nodeHeaders: ReturnType<typeof fromNodeHeaders>) {
     await auth.api.signOut({ headers: nodeHeaders });
     return { message: "Signed out" };
-  },
-
-  async me(nodeHeaders: ReturnType<typeof fromNodeHeaders>) {
-    const session = await auth.api.getSession({ headers: nodeHeaders });
-    if (!session) throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
-    return session.user;
   }
 };

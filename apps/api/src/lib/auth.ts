@@ -2,12 +2,21 @@ import { db } from "@repo/db";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { emailOTP } from "better-auth/plugins";
+import { env } from "../config/env";
 import { logger } from "./logger";
 
 export const auth = betterAuth({
-  database: prismaAdapter(db, {
-    provider: "postgresql"
-  }),
+  database: prismaAdapter(db, { provider: "postgresql" }),
+  trustedOrigins: [env.CORS_ORIGIN, env.BETTER_AUTH_URL],
+  secret: env.BETTER_AUTH_SECRET,
+  baseURL: env.BETTER_AUTH_URL,
+  session: {
+    expiresIn: 60 * 60 * 24 * 7,
+    updateAge: 60 * 60 * 24
+  },
+  advanced: {
+    useSecureCookies: false
+  },
   plugins: [
     emailOTP({
       otpLength: 6,
@@ -15,7 +24,6 @@ export const auth = betterAuth({
       allowedAttempts: 3,
       disableSignUp: false,
       async sendVerificationOTP({ email, otp, type }) {
-        // TODO: replace with Resend when packages/email is ready
         logger.info({ email, type }, `OTP for ${email}: ${otp}`);
       }
     })
