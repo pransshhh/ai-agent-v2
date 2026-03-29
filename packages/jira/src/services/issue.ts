@@ -34,7 +34,9 @@ export function createIssueService(
           ...(input.assigneeAccountId
             ? { assignee: { accountId: input.assigneeAccountId } }
             : {}),
-          ...(input.labels?.length ? { labels: input.labels } : {})
+          ...(input.labels?.length ? { labels: input.labels } : {}),
+          // parent links issue to epic in modern Jira Cloud
+          ...(input.epicKey ? { parent: { key: input.epicKey } } : {})
         }
       });
 

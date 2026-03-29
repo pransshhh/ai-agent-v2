@@ -14,8 +14,7 @@ export function createJiraClients(config: JiraConfig): JiraClients {
         email: config.email,
         apiToken: config.apiToken
       }
-    },
-    newErrorHandling: true
+    }
   };
 
   return {

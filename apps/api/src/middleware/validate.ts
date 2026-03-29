@@ -1,10 +1,10 @@
 import type { NextFunction, Request, Response } from "express";
-import type { ZodSchema } from "zod";
+import { z } from "zod";
 
 type ValidateSchema = {
-  body?: ZodSchema;
-  query?: ZodSchema;
-  params?: ZodSchema;
+  body?: z.ZodType;
+  query?: z.ZodType;
+  params?: z.ZodType;
 };
 
 export const validate = (schema: ValidateSchema) => {
@@ -14,7 +14,7 @@ export const validate = (schema: ValidateSchema) => {
       if (!result.success) {
         return res.status(400).json({
           message: "Validation failed",
-          errors: result.error.flatten().fieldErrors
+          errors: z.treeifyError(result.error)
         });
       }
       req.body = result.data;
@@ -25,10 +25,10 @@ export const validate = (schema: ValidateSchema) => {
       if (!result.success) {
         return res.status(400).json({
           message: "Validation failed",
-          errors: result.error.flatten().fieldErrors
+          errors: z.treeifyError(result.error)
         });
       }
-      req.query = result.data as typeof req.query;
+      Object.assign(req.query, result.data);
     }
 
     if (schema.params) {
@@ -36,7 +36,7 @@ export const validate = (schema: ValidateSchema) => {
       if (!result.success) {
         return res.status(400).json({
           message: "Validation failed",
-          errors: result.error.flatten().fieldErrors
+          errors: z.treeifyError(result.error)
         });
       }
       req.params = result.data as typeof req.params;

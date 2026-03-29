@@ -12,7 +12,6 @@ export function createEpicService(v3: Version3Client, config: JiraConfig) {
   return {
     /**
      * Creates an Epic in the configured project.
-     * customfield_10011 is the standard Jira "Epic Name" field — required for epics.
      * The fields type already has [key: string]: any so customfield_* keys are valid.
      */
     async createEpic(input: CreateEpicInput): Promise<JiraEpic> {
@@ -25,7 +24,6 @@ export function createEpicService(v3: Version3Client, config: JiraConfig) {
         project: { key: config.projectKey },
         summary: input.summary,
         issuetype: { name: "Epic" },
-        customfield_10011: input.name,
         ...(input.description ? { description: input.description } : {}),
         ...(input.priority ? { priority: { name: input.priority } } : {})
       };
@@ -49,7 +47,7 @@ export function createEpicService(v3: Version3Client, config: JiraConfig) {
      * Gets all issues belonging to an epic via JQL.
      */
     async getEpicIssues(epicKey: string): Promise<JiraIssue[]> {
-      const res = await v3.issueSearch.searchForIssuesUsingJql({
+      const res = await v3.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
         jql: `project = "${config.projectKey}" AND "Epic Link" = "${epicKey}" ORDER BY created DESC`,
         fields: [
           "summary",
