@@ -1,0 +1,17 @@
+{
+  "name": "@repo/jira",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf node_modules"
+  },
+  "dependencies": {
+    "jira.js": "^5.3.1"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*"
+  }
+}

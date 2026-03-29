@@ -35,6 +35,9 @@ importers:
       '@repo/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@repo/jira':
+        specifier: workspace:*
+        version: link:../../packages/jira
       '@repo/zod':
         specifier: workspace:*
         version: link:../../packages/zod
@@ -194,6 +197,16 @@ importers:
       prisma:
         specifier: ^7.5.0
         version: 7.6.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@6.0.2)
+
+  packages/jira:
+    dependencies:
+      jira.js:
+        specifier: ^5.3.1
+        version: 5.3.1
+    devDependencies:
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
 
   packages/typescript-config: {}
 
@@ -2409,6 +2422,10 @@ packages:
   isexe@3.1.5:
     resolution: {integrity: sha512-6B3tLtFqtQS4ekarvLVMZ+X+VlvQekbe4taUkf/rhVO3d/h0M2rfARm/pXLcPEsjjMsFgrFgSrhQIxcSVrBz8w==}
     engines: {node: '>=18'}
+
+  jira.js@5.3.1:
+    resolution: {integrity: sha512-ldeH/vcSMLb95OVITF9Q34aNRwPZwCO8PpsY+ZXpzkbGtSzMx74R1pm7ev/0OrDrsYGXSJ+noMS3LH/LnAyG1w==}
+    engines: {node: '>=20'}
 
   jiti@2.6.1:
     resolution: {integrity: sha512-ekilCSN1jwRvIbgeg/57YFh8qQDNbwDb9xT/qu2DAHbFFZUicIl4ygVaAvzveMhMVr3LnpSKTNnwt8PoOfmKhQ==}
@@ -5601,6 +5618,14 @@ snapshots:
   isexe@2.0.0: {}
 
   isexe@3.1.5: {}
+
+  jira.js@5.3.1:
+    dependencies:
+      axios: 1.14.0
+      mime-types: 2.1.35
+      zod: 4.3.6
+    transitivePeerDependencies:
+      - debug
 
   jiti@2.6.1: {}
 

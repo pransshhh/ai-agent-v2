@@ -10,7 +10,12 @@ const envSchema = z.object({
   CORS_ORIGIN: z.url(),
   DATABASE_URL: z.url(),
   BETTER_AUTH_SECRET: z.string(),
-  BETTER_AUTH_URL: z.url()
+  BETTER_AUTH_URL: z.url(),
+  JIRA_BASE_URL: z.url(),
+  JIRA_EMAIL: z.email(),
+  JIRA_API_TOKEN: z.string().min(1),
+  JIRA_PROJECT_KEY: z.string().min(1),
+  JIRA_BOARD_ID: z.coerce.number()
 });
 
 const { success, data, error } = envSchema.safeParse(process.env);
