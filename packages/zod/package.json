@@ -2,7 +2,8 @@
   "name": "@repo/zod",
   "private": true,
   "scripts": {
-    "clean": "rimraf node_modules"
+    "clean": "rimraf node_modules",
+    "typecheck": "tsc --noEmit"
   },
   "exports": {
     ".": "./src/index.ts",
