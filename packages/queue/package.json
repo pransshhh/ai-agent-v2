@@ -1,5 +1,5 @@
 {
-  "name": "@repo/ai",
+  "name": "@repo/queue",
   "version": "0.0.1",
   "private": true,
   "exports": {
@@ -10,13 +10,11 @@
     "clean": "rimraf node_modules"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.64",
-    "@ai-sdk/google": "^3.0.53",
-    "@ai-sdk/openai": "^3.0.48",
-    "ai": "^6.0.141"
+    "bullmq": "^5.56.2"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
+    "@types/node": "^24.10.1",
     "typescript": "^6.0.2"
   }
 }

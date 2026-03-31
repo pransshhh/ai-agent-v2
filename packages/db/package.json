@@ -1,5 +1,6 @@
 {
   "name": "@repo/db",
+  "version": "0.0.1",
   "private": true,
   "exports": {
     ".": "./src/index.ts"
@@ -21,8 +22,9 @@
     "pg": "^8.20.0"
   },
   "devDependencies": {
-    "@types/pg": "^8.20.0",
     "@repo/typescript-config": "workspace:*",
-    "prisma": "^7.5.0"
+    "@types/node": "^24.10.1",
+    "prisma": "^7.5.0",
+    "typescript": "^6.0.2"
   }
 }
