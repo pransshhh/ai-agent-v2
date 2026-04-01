@@ -24,7 +24,7 @@ export default {
         "api",
         "web",
         "worker",
-        "agents",
+        "agent",
         "auth",
         "integrations",
         "contracts",

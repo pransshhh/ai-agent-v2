@@ -1,4 +1,4 @@
-export type { Job, Worker } from "bullmq";
+export type { Job, Queue, Worker } from "bullmq";
 export { createRedisConnection } from "./connection";
 export type {
   CodingJobPayload,

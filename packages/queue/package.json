@@ -10,7 +10,7 @@
     "clean": "rimraf node_modules"
   },
   "dependencies": {
-    "bullmq": "^5.56.2"
+    "bullmq": "^5.71.0"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
