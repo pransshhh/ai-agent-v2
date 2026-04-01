@@ -15,14 +15,18 @@ const envSchema = z.object({
   JIRA_EMAIL: z.email(),
   JIRA_API_TOKEN: z.string().min(1),
   JIRA_PROJECT_KEY: z.string().min(1),
-  JIRA_BOARD_ID: z.coerce.number()
+  JIRA_BOARD_ID: z.coerce.number(),
+  GOOGLE_GENERATIVE_AI_API_KEY: z.string(),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  REDIS_URL: z.url()
 });
 
 const { success, data, error } = envSchema.safeParse(process.env);
 
 if (!success) {
   console.error("❌ Invalid environment variables");
-  console.error(error.format());
+  console.error(z.treeifyError(error));
   process.exit(1);
 }
 

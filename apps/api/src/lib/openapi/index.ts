@@ -3,6 +3,7 @@ import {
   OpenApiGeneratorV3
 } from "@asteasolutions/zod-to-openapi";
 import type { OpenAPIObject } from "@asteasolutions/zod-to-openapi/dist/types";
+import { registerAgentPaths } from "./agent";
 import { registerAuthPaths } from "./auth";
 import { registerJiraPaths } from "./jira";
 
@@ -16,6 +17,7 @@ registry.registerComponent("securitySchemes", "cookieAuth", {
 
 registerAuthPaths(registry);
 registerJiraPaths(registry);
+registerAgentPaths(registry);
 
 export const generateOpenAPISpec = (): OpenAPIObject => {
   const generator = new OpenApiGeneratorV3(registry.definitions);

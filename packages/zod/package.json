@@ -5,6 +5,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./auth": "./src/auth/index.ts",
+    "./agent": "./src/agent/index.ts",
     "./common": "./src/common/index.ts",
     "./jira": "./src/jira/index.ts"
   },
