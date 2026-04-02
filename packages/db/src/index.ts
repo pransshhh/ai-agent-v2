@@ -6,3 +6,4 @@ if (!connectionString) throw new Error("DATABASE_URL is not set");
 
 const pool = new PrismaPg({ connectionString });
 export const db = new PrismaClient({ adapter: pool });
+export type { ProjectStatus } from "./generated/prisma/client";
