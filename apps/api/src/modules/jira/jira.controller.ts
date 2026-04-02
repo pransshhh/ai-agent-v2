@@ -82,6 +82,12 @@ export const jiraController = {
     res.status(201).json({ message: "Comment added" });
   },
 
+  async deleteIssue(req: Request, res: Response) {
+    const { issueKey } = req.params as IssueParams;
+    await jiraService.deleteIssue(issueKey);
+    res.json({ message: "Issue deleted" });
+  },
+
   async createEpic(req: Request, res: Response) {
     const epic = await jiraService.createEpic(req.body);
     res.status(201).json(epic);

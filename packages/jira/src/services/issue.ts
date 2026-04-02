@@ -20,9 +20,6 @@ export function createIssueService(
   config: JiraConfig
 ) {
   return {
-    /**
-     * Creates a new issue (Story, Task, Bug, Subtask) in the configured project.
-     */
     async createIssue(input: CreateIssueInput): Promise<JiraIssue> {
       const res = await v3.issues.createIssue({
         fields: {
@@ -35,7 +32,6 @@ export function createIssueService(
             ? { assignee: { accountId: input.assigneeAccountId } }
             : {}),
           ...(input.labels?.length ? { labels: input.labels } : {}),
-          // parent links issue to epic in modern Jira Cloud
           ...(input.epicKey ? { parent: { key: input.epicKey } } : {})
         }
       });
@@ -50,18 +46,11 @@ export function createIssueService(
       return this.getIssue(res.key ?? "");
     },
 
-    /**
-     * Fetches a single issue by key (e.g. "SCRUM-1").
-     */
     async getIssue(issueKey: string): Promise<JiraIssue> {
       const res = await v3.issues.getIssue({ issueIdOrKey: issueKey });
       return mapV3Issue(res);
     },
 
-    /**
-     * Lists all issues in a sprint.
-     * Uses AgileModels.SearchResults — the correct public type for this response.
-     */
     async getSprintIssues(sprintId: number): Promise<JiraIssue[]> {
       const res =
         await agile.sprint.getIssuesForSprint<AgileModels.SearchResults>({
@@ -70,9 +59,6 @@ export function createIssueService(
       return res.issues.map(mapAgileIssue);
     },
 
-    /**
-     * Updates issue fields (summary, description, priority, assignee, labels).
-     */
     async updateIssue(
       issueKey: string,
       input: UpdateIssueInput
@@ -92,32 +78,27 @@ export function createIssueService(
       return this.getIssue(issueKey);
     },
 
-    /**
-     * Transitions an issue to "Done".
-     * Fetches transitions dynamically — avoids hardcoding workflow IDs
-     * which differ per Jira project configuration.
-     */
-    async closeIssue(issueKey: string): Promise<void> {
+    async transitionIssue(
+      issueKey: string,
+      targetStatus: "In Progress" | "In Review" | "Done"
+    ): Promise<void> {
       const transitions = await v3.issues.getTransitions({
         issueIdOrKey: issueKey
       });
-      const doneTransition = transitions.transitions?.find(
-        (t) =>
-          t.name?.toLowerCase() === "done" ||
-          t.to?.statusCategory?.key === "done"
+      const transition = transitions.transitions?.find(
+        (t) => t.name?.toLowerCase() === targetStatus.toLowerCase()
       );
-      if (!doneTransition?.id) {
-        throw new Error(`No 'Done' transition found for issue ${issueKey}`);
+      if (!transition?.id) {
+        throw new Error(
+          `No "${targetStatus}" transition found for issue ${issueKey}`
+        );
       }
       await v3.issues.doTransition({
         issueIdOrKey: issueKey,
-        transition: { id: doneTransition.id }
+        transition: { id: transition.id }
       });
     },
 
-    /**
-     * Assigns an issue to a user by their Jira accountId.
-     */
     async assignIssue(issueKey: string, accountId: string): Promise<void> {
       await v3.issues.assignIssue({
         issueIdOrKey: issueKey,
@@ -125,26 +106,21 @@ export function createIssueService(
       });
     },
 
-    /**
-     * Adds a plain-text comment to an issue.
-     * jira.js accepts a plain string for `comment` and handles ADF internally.
-     */
     async addComment(issueKey: string, input: AddCommentInput): Promise<void> {
       await v3.issueComments.addComment({
         issueIdOrKey: issueKey,
         comment: input.body
       });
+    },
+
+    async deleteIssue(issueKey: string): Promise<void> {
+      await v3.issues.deleteIssue({ issueIdOrKey: issueKey });
     }
   };
 }
 
-/**
- * Maps a Version3 Issue (from getIssue) to our JiraIssue type.
- * Version3Models.Issue has typed fields — no Record<string,any> needed.
- */
 function mapV3Issue(raw: Version3Models.Issue): JiraIssue {
   const f = raw.fields;
-  // description is a Document (ADF) — extract plain text from first paragraph
   const description =
     f.description?.content?.[0]?.content
       ?.filter((n) => n.type === "text")
@@ -166,14 +142,8 @@ function mapV3Issue(raw: Version3Models.Issue): JiraIssue {
   };
 }
 
-/**
- * Maps an Agile Issue (from getSprintIssues) to our JiraIssue type.
- * AgileModels.Issue.fields is typed as Fields which has [key: string]: any
- * index signature — we access known fields safely via their typed properties.
- */
 function mapAgileIssue(raw: AgileModels.Issue): JiraIssue {
   const f = raw.fields;
-  // fields is optional in AgileModels.Issue — return a minimal shell if missing
   if (!f) {
     return {
       id: raw.id ?? "",

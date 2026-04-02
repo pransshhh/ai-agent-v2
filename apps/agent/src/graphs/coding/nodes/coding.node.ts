@@ -19,8 +19,6 @@ import type { CodingStateType } from "../state";
 export async function codingNode(
   state: CodingStateType
 ): Promise<Partial<CodingStateType>> {
-  // ─── Get next ticket ────────────────────────────────────────────────────────
-
   const sprintIssues = await jira.issues.getSprintIssues(state.sprintId);
 
   const pending = sprintIssues.filter(
@@ -43,8 +41,6 @@ export async function codingNode(
     "Coding node started"
   );
 
-  // ─── Workspace ─────────────────────────────────────────────────────────────
-
   const BASE_TMP_DIR = path.resolve(process.cwd(), "tmp");
 
   const workDir =
@@ -53,13 +49,11 @@ export async function codingNode(
 
   await mkdir(workDir, { recursive: true });
 
-  // ─── Jira: mark progress ───────────────────────────────────────────────────
+  await jira.issues.transitionIssue(ticket.key, "In Progress");
 
   await jira.issues.addComment(ticket.key, {
     body: `Agent started working on this ticket. Run ID: ${state.runId}`
   });
-
-  // ─── Tools ─────────────────────────────────────────────────────────────────
 
   const tools = {
     readFile: createReadFileTool(workDir),
@@ -68,15 +62,11 @@ export async function codingNode(
     runCommand: createRunCommandTool(workDir)
   };
 
-  // ─── Model ─────────────────────────────────────────────────────────────────
-
   const model = createModel({
     provider: state.aiProvider,
     apiKey: state.aiApiKey,
-    model: "gemini-3.1-flash-lite-preview"
+    model: "gemini-2.5-flash"
   });
-
-  // ─── Instructions ──────────────────────────────────────────────────────────
 
   const instructions = `You are an expert software engineer implementing Jira tickets.
 
@@ -125,9 +115,7 @@ Start by exploring the project, then implement the feature.`,
       }
     });
 
-    // ─── Jira: mark done ─────────────────────────────────────────────────────
-
-    await jira.issues.closeIssue(ticket.key);
+    await jira.issues.transitionIssue(ticket.key, "Done");
 
     await jira.issues.addComment(ticket.key, {
       body: `✅ Agent completed implementation. Run ID: ${state.runId}`

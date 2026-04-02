@@ -26,8 +26,6 @@ export async function jiraNode(
     model: "gemini-3.1-flash-lite-preview"
   });
 
-  // ─── Tools ────────────────────────────────────────────────────────────────
-
   const tools = {
     createEpic: tool({
       description: "Create a Jira epic",
@@ -124,8 +122,6 @@ export async function jiraNode(
       }
     })
   };
-
-  // ─── Prompt ───────────────────────────────────────────────────────────────
 
   const instructions = `You are a senior engineering project manager.
 

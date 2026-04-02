@@ -35,6 +35,9 @@ importers:
       '@repo/ai':
         specifier: workspace:*
         version: link:../../packages/ai
+      '@repo/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@repo/jira':
         specifier: workspace:*
         version: link:../../packages/jira

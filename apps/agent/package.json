@@ -12,6 +12,7 @@
     "@aws-sdk/client-s3": "^3.1020.0",
     "@langchain/langgraph": "^1.2.6",
     "@repo/ai": "workspace:*",
+    "@repo/db": "workspace:*",
     "@repo/jira": "workspace:*",
     "@repo/queue": "workspace:*",
     "@repo/zod": "workspace:*",

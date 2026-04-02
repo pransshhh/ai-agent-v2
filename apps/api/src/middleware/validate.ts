@@ -42,6 +42,6 @@ export const validate = (schema: ValidateSchema) => {
       req.params = result.data as typeof req.params;
     }
 
-    next();
+    return next();
   };
 };

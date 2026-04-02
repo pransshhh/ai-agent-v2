@@ -1,52 +1,83 @@
+import { db } from "@repo/db";
 import type { CodingJobPayload } from "@repo/queue";
 import { QUEUE_NAMES } from "@repo/queue";
 import { Worker } from "bullmq";
 import { codingGraph } from "../graphs/coding/graph";
+import { jira } from "../lib/jira";
 import { logger } from "../lib/logger";
 import { redisConnection } from "../lib/redis";
 
-/**
- * BullMQ worker for coding jobs.
- * Picks up jobs enqueued by apps/api when user clicks "Start Coding".
- */
 export function startCodingWorker() {
   const worker = new Worker<CodingJobPayload>(
     QUEUE_NAMES.CODING,
     async (job) => {
-      logger.info(
-        { jobId: job.id, runId: job.data.runId },
-        "Coding job started"
-      );
+      const { runId, projectId } = job.data;
 
-      const result = await codingGraph.invoke({
-        runId: job.data.runId,
-        userId: job.data.userId,
-        projectId: job.data.projectId,
-        sprintId: job.data.sprintId,
-        s3Prefix: job.data.s3Prefix,
-        aiProvider: job.data.aiProvider,
-        aiApiKey: job.data.aiApiKey
-      });
+      logger.info({ jobId: job.id, runId }, "Coding job started");
 
-      if (result.status === "failed") {
-        throw new Error(result.error ?? "Coding graph failed");
+      try {
+        const startDate = new Date();
+        const endDate = new Date();
+        endDate.setDate(endDate.getDate() + 14);
+        await jira.sprints.updateSprint(job.data.sprintId, {
+          state: "active",
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString()
+        });
+        logger.info({ sprintId: job.data.sprintId }, "Sprint started");
+
+        const result = await codingGraph.invoke({
+          runId,
+          userId: job.data.userId,
+          projectId,
+          sprintId: job.data.sprintId,
+          s3Prefix: job.data.s3Prefix,
+          aiProvider: job.data.aiProvider,
+          aiApiKey: job.data.aiApiKey
+        });
+
+        if (result.status === "failed") {
+          await db.project.update({
+            where: { id: projectId },
+            data: { status: "FAILED", currentRunId: null }
+          });
+          throw new Error(result.error ?? "Coding graph failed");
+        }
+
+        // DONE if no failed tickets, otherwise FAILED
+        const finalStatus =
+          result.failedTickets?.length > 0 ? "FAILED" : "DONE";
+
+        await db.project.update({
+          where: { id: projectId },
+          data: { status: finalStatus, currentRunId: null }
+        });
+
+        logger.info(
+          {
+            jobId: job.id,
+            runId,
+            completedTickets: result.completedTickets,
+            failedTickets: result.failedTickets,
+            finalStatus
+          },
+          "Coding job completed"
+        );
+
+        return result;
+      } catch (err) {
+        await db.project
+          .update({
+            where: { id: projectId },
+            data: { status: "FAILED", currentRunId: null }
+          })
+          .catch(() => {});
+        throw err;
       }
-
-      logger.info(
-        {
-          jobId: job.id,
-          runId: job.data.runId,
-          completedTickets: result.completedTickets,
-          failedTickets: result.failedTickets
-        },
-        "Coding job completed"
-      );
-
-      return result;
     },
     {
       connection: redisConnection,
-      concurrency: 1 // one coding job at a time — file system operations
+      concurrency: 1
     }
   );
 

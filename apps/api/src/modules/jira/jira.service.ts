@@ -53,7 +53,7 @@ export const jiraService = {
   },
 
   async closeIssue(issueKey: string) {
-    return jira.issues.closeIssue(issueKey);
+    return jira.issues.transitionIssue(issueKey, "Done");
   },
 
   async assignIssue(issueKey: string, input: AssignIssueRequest) {
@@ -62,6 +62,10 @@ export const jiraService = {
 
   async addComment(issueKey: string, input: AddCommentRequest) {
     return jira.issues.addComment(issueKey, { body: input.body });
+  },
+
+  async deleteIssue(issueKey: string) {
+    return jira.issues.deleteIssue(issueKey);
   },
 
   async createEpic(input: CreateEpicRequest) {

@@ -20,5 +20,5 @@ export const requireAuth = async (
   res.locals.session = session;
   res.locals.user = session.user;
 
-  next();
+  return next();
 };

@@ -1,3 +1,4 @@
+import { db } from "@repo/db";
 import type { PlanningJobPayload } from "@repo/queue";
 import { QUEUE_NAMES } from "@repo/queue";
 import { Worker } from "bullmq";
@@ -5,48 +6,69 @@ import { planningGraph } from "../graphs/planning/graph";
 import { logger } from "../lib/logger";
 import { redisConnection } from "../lib/redis";
 
-/**
- * BullMQ worker for planning jobs.
- * Picks up jobs enqueued by apps/api when user submits a project prompt.
- */
 export function startPlanningWorker() {
   const worker = new Worker<PlanningJobPayload>(
     QUEUE_NAMES.PLANNING,
     async (job) => {
-      logger.info(
-        { jobId: job.id, runId: job.data.runId },
-        "Planning job started"
-      );
+      const { runId, projectId } = job.data;
 
-      const result = await planningGraph.invoke({
-        runId: job.data.runId,
-        userId: job.data.userId,
-        projectId: job.data.projectId,
-        prompt: job.data.prompt,
-        aiProvider: job.data.aiProvider,
-        aiApiKey: job.data.aiApiKey
-      });
+      logger.info({ jobId: job.id, runId }, "Planning job started");
 
-      if (result.status === "failed") {
-        throw new Error(result.error ?? "Planning graph failed");
+      try {
+        const result = await planningGraph.invoke({
+          runId,
+          userId: job.data.userId,
+          projectId,
+          prompt: job.data.prompt,
+          aiProvider: job.data.aiProvider,
+          aiApiKey: job.data.aiApiKey
+        });
+
+        if (result.status === "failed") {
+          // Update project status to FAILED
+          await db.project.update({
+            where: { id: projectId },
+            data: { status: "FAILED", currentRunId: null }
+          });
+          throw new Error(result.error ?? "Planning graph failed");
+        }
+
+        // Update project — status PLANNED + save sprintId
+        await db.project.update({
+          where: { id: projectId },
+          data: {
+            status: "PLANNED",
+            jiraSprintId: result.sprintId,
+            currentRunId: null
+          }
+        });
+
+        logger.info(
+          {
+            jobId: job.id,
+            runId,
+            epicKeys: result.epicKeys,
+            ticketKeys: result.ticketKeys,
+            sprintId: result.sprintId
+          },
+          "Planning job completed"
+        );
+
+        return result;
+      } catch (err) {
+        // Ensure project status is FAILED on any unexpected error
+        await db.project
+          .update({
+            where: { id: projectId },
+            data: { status: "FAILED", currentRunId: null }
+          })
+          .catch(() => {}); // swallow DB error — don't mask original error
+        throw err;
       }
-
-      logger.info(
-        {
-          jobId: job.id,
-          runId: job.data.runId,
-          epicKeys: result.epicKeys,
-          ticketKeys: result.ticketKeys,
-          sprintId: result.sprintId
-        },
-        "Planning job completed"
-      );
-
-      return result;
     },
     {
       connection: redisConnection,
-      concurrency: 2 // max 2 planning jobs at once
+      concurrency: 2
     }
   );
 

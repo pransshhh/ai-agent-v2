@@ -3,12 +3,22 @@ import { agentService } from "./agent.service";
 
 export const agentController = {
   async startPlanning(req: Request, res: Response) {
-    const result = await agentService.startPlanning(req.body);
+    const { id } = req.params as { id: string };
+    const result = await agentService.startPlanning(
+      id,
+      res.locals.user.id,
+      req.body
+    );
     res.status(201).json(result);
   },
 
   async approvePlanning(req: Request, res: Response) {
-    const result = await agentService.approvePlanning(req.body);
+    const { id } = req.params as { id: string };
+    const result = await agentService.approvePlanning(
+      id,
+      res.locals.user.id,
+      req.body
+    );
     res.status(201).json(result);
   }
 };
