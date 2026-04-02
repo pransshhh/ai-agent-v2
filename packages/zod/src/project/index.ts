@@ -1,4 +1,7 @@
+import { extendZodWithOpenApi } from "@asteasolutions/zod-to-openapi";
 import { z } from "zod";
+
+extendZodWithOpenApi(z);
 
 export const ZProjectStatus = z.enum([
   "CREATED",
@@ -35,7 +38,6 @@ export const ZCreateProjectRequest = z.object({
   description: z
     .string()
     .max(500)
-    .optional()
     .openapi({ example: "A full stack todo app with auth" })
 });
 

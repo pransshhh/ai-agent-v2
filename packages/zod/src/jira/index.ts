@@ -1,4 +1,7 @@
+import { extendZodWithOpenApi } from "@asteasolutions/zod-to-openapi";
 import { z } from "zod";
+
+extendZodWithOpenApi(z);
 
 export const ZIssueType = z.enum(["Story", "Task", "Bug", "Epic", "Subtask"]);
 export const ZIssuePriority = z.enum([
