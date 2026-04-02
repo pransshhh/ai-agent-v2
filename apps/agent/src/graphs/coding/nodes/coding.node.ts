@@ -9,13 +9,6 @@ import { createRunCommandTool } from "../../../tools/run-command";
 import { createWriteFileTool } from "../../../tools/write-file";
 import type { CodingStateType } from "../state";
 
-/**
- * Coding node — picks the next unfinished ticket from the sprint,
- * implements it using the AI model + file tools, then updates Jira.
- *
- * Returns updated state. The graph will loop back here until all
- * tickets are done (controlled by shouldContinue edge in graph.ts).
- */
 export async function codingNode(
   state: CodingStateType
 ): Promise<Partial<CodingStateType>> {
@@ -126,6 +119,7 @@ Start by exploring the project, then implement the feature.`,
       "Ticket completed"
     );
 
+    await new Promise((resolve) => setTimeout(resolve, 4000));
     return {
       currentTicketKey: ticket.key,
       currentTicketSummary: ticket.summary,
@@ -144,6 +138,7 @@ Start by exploring the project, then implement the feature.`,
       body: `❌ Agent failed: ${message}. Run ID: ${state.runId}`
     });
 
+    await new Promise((resolve) => setTimeout(resolve, 4000));
     return {
       failedTickets: [ticket.key],
       workDir,

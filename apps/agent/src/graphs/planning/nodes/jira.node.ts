@@ -4,17 +4,6 @@ import { jira } from "../../../lib/jira";
 import { logger } from "../../../lib/logger";
 import type { PlanningStateType } from "../state";
 
-/**
- * Jira node — the planning graph's only node.
- *
- * Receives the user's prompt and uses the AI model to:
- * 1. Decide what epics to create
- * 2. Break epics into stories/tasks
- * 3. Create a sprint and assign tickets to it
- *
- * The model is given tools that call our @repo/jira services directly.
- * It decides how many epics, stories, sprints to create based on the prompt.
- */
 export async function jiraNode(
   state: PlanningStateType
 ): Promise<Partial<PlanningStateType>> {
@@ -132,8 +121,9 @@ Rules:
 - Only use tool calls
 - Create 2–5 epics
 - Each epic → 3–8 stories/tasks
-- After ALL tickets → create ONE sprint
-- Include ALL ticket keys in sprint
+- Call createSprint EXACTLY ONCE, only after ALL epics and stories are created
+- Pass ALL created ticket keys to createSprint in the issueKeys array
+- Do NOT call createSprint more than once under any circumstances
 
 Project:
 ${state.prompt}`;
@@ -170,8 +160,9 @@ ${state.prompt}`;
           if ("key" in output && typeof output.key === "string") {
             if (result.toolName === "createEpic") {
               epicKeys.push(output.key);
+            } else {
+              ticketKeys.push(output.key);
             }
-            ticketKeys.push(output.key);
           }
 
           if ("sprintId" in output && typeof output.sprintId === "number") {
