@@ -40,11 +40,10 @@ const STATUS_CONFIG: Record<
       | "destructive";
   }
 > = {
-  CREATED: { label: "Created", variant: "secondary" },
+  IDLE: { label: "Idle", variant: "secondary" },
   PLANNING: { label: "Planning", variant: "warning" },
   PLANNED: { label: "Planned", variant: "purple" },
   CODING: { label: "Coding", variant: "info" },
-  DONE: { label: "Done", variant: "success" },
   FAILED: { label: "Failed", variant: "destructive" }
 };
 
@@ -174,7 +173,7 @@ export const Route = createFileRoute("/dashboard/")({
     const active = projects.filter((p) =>
       ["PLANNING", "CODING"].includes(p.status)
     ).length;
-    const done = projects.filter((p) => p.status === "DONE").length;
+    const failed = projects.filter((p) => p.status === "FAILED").length;
 
     return (
       <div className="flex flex-col h-full">
@@ -191,7 +190,7 @@ export const Route = createFileRoute("/dashboard/")({
               {[
                 { label: "Total", value: total },
                 { label: "Active", value: active },
-                { label: "Done", value: done }
+                { label: "Failed", value: failed }
               ].map((stat) => (
                 <Card key={stat.label}>
                   <CardContent className="pt-5 pb-4 px-5">

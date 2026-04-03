@@ -57,27 +57,24 @@ const STATUS_BADGE: Record<
       | "destructive";
   }
 > = {
-  CREATED: { label: "Created", variant: "secondary" },
+  IDLE: { label: "Idle", variant: "secondary" },
   PLANNING: { label: "Planning", variant: "warning" },
   PLANNED: { label: "Planned", variant: "purple" },
   CODING: { label: "Coding", variant: "info" },
-  DONE: { label: "Done", variant: "success" },
   FAILED: { label: "Failed", variant: "destructive" }
 };
 
 const TIMELINE: Exclude<ProjectStatus, "FAILED">[] = [
-  "CREATED",
+  "IDLE",
   "PLANNING",
   "PLANNED",
-  "CODING",
-  "DONE"
+  "CODING"
 ];
 const TIMELINE_LABELS: Record<string, string> = {
-  CREATED: "Created",
+  IDLE: "Idle",
   PLANNING: "Planning",
   PLANNED: "Planned",
-  CODING: "Coding",
-  DONE: "Done"
+  CODING: "Coding"
 };
 
 function StatusTimeline({ status }: { status: ProjectStatus }) {
@@ -233,8 +230,7 @@ function ChatPanel({
   const isJiraLinked = !!project.jiraProjectKey;
   const isRunning =
     project.status === "PLANNING" || project.status === "CODING";
-  const isTerminal = project.status === "DONE" || project.status === "FAILED";
-  const inputDisabled = isRunning || isTerminal || project.status === "PLANNED";
+  const inputDisabled = isRunning || project.status === "PLANNED";
 
   const {
     mutate: linkJira,
@@ -382,13 +378,11 @@ function ChatPanel({
           <div className="flex gap-2 items-end">
             <Textarea
               placeholder={
-                isTerminal
-                  ? "Project is complete."
-                  : project.status === "PLANNED"
-                    ? "Approve the plan above to continue..."
-                    : isRunning
-                      ? "Agent is working..."
-                      : "Describe what you want to build..."
+                project.status === "PLANNED"
+                  ? "Approve the plan above to continue..."
+                  : isRunning
+                    ? "Agent is working..."
+                    : "Describe what you want to build..."
               }
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -433,7 +427,7 @@ function getInitialMessages(project: Project): ChatMessage[] {
   }
 
   switch (project.status) {
-    case "CREATED":
+    case "IDLE":
       return [
         mk(
           `Jira project ${project.jiraProjectKey} is linked. Describe what you want to build and I'll create your epics, stories, and sprint.`
@@ -458,8 +452,6 @@ function getInitialMessages(project: Project): ChatMessage[] {
           isLoading: true
         })
       ];
-    case "DONE":
-      return [mk("All done! Every ticket has been implemented.")];
     case "FAILED":
       return [
         mk(
@@ -526,9 +518,11 @@ function ProjectPage({ id }: { id: string }) {
         isLoading: true
       });
       addLog("Sprint activated. Coding agent started.", "info");
-    } else if (prev === "CODING" && project.status === "DONE") {
-      addMsg("All done! Every ticket has been implemented.");
-      addLog("All tickets implemented. Coding complete.", "success");
+    } else if (prev === "CODING" && project.status === "IDLE") {
+      addMsg(
+        "Sprint complete! All tickets implemented. Describe the next sprint or plan more work."
+      );
+      addLog("Sprint complete. All tickets implemented.", "success");
     } else if (project.status === "FAILED") {
       addMsg("Something went wrong. Check the logs for details.");
       addLog("Process failed.", "error");

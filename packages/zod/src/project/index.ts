@@ -4,11 +4,10 @@ import { z } from "zod";
 extendZodWithOpenApi(z);
 
 export const ZProjectStatus = z.enum([
-  "CREATED",
+  "IDLE",
   "PLANNING",
   "PLANNED",
   "CODING",
-  "DONE",
   "FAILED"
 ]);
 

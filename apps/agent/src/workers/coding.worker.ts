@@ -44,9 +44,9 @@ export function startCodingWorker() {
           throw new Error(result.error ?? "Coding graph failed");
         }
 
-        // DONE if no failed tickets, otherwise FAILED
+        // Back to IDLE if all tickets succeeded, FAILED otherwise
         const finalStatus =
-          result.failedTickets?.length > 0 ? "FAILED" : "DONE";
+          result.failedTickets?.length > 0 ? "FAILED" : "IDLE";
 
         await db.project.update({
           where: { id: projectId },

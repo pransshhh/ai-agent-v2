@@ -85,11 +85,10 @@ Both imported from `jira.js v5`. This is why `packages/jira` exports `createJira
 
 ```prisma
 enum ProjectStatus {
-  CREATED    // just created, no planning yet
+  IDLE       // no agent running — default state and post-sprint completion
   PLANNING   // planning job running
   PLANNED    // tickets created, awaiting user approval
   CODING     // coding job running
-  DONE       // all tickets implemented
   FAILED     // something went wrong
 }
 
@@ -101,7 +100,7 @@ model Project {
   jiraProjectKey String?       # null until user links Jira
   jiraBoardId    Int?
   jiraSprintId   Int?          # set after planning completes
-  status         ProjectStatus @default(CREATED)
+  status         ProjectStatus @default(IDLE)
   currentRunId   String?       # BullMQ runId of active job
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
@@ -187,3 +186,6 @@ api enqueues job → Redis/BullMQ → agent worker picks up → LangGraph runs �
 ## Current task
 
 Building `apps/web` — see `apps/web/CLAUDE.md` for frontend-specific context.
+
+// Put completed tickets to in-review not to done.
+<!-- claude --resume b8e1cc31-8cea-4e47-aa11-c54a6e16652a -->
