@@ -1,8 +1,5 @@
 import { db } from "@repo/db";
-import type {
-  ApprovePlanningRequest,
-  StartPlanningRequest
-} from "@repo/zod/agent";
+import type { StartPlanningRequest } from "@repo/zod/agent";
 import { env } from "../../config/env";
 import { codingQueue, planningQueue } from "../../lib/queue";
 import { AppError } from "../../middleware/error";
@@ -45,11 +42,7 @@ export const agentService = {
     return { jobId: job.id ?? "", runId };
   },
 
-  async approvePlanning(
-    projectId: string,
-    userId: string,
-    input: ApprovePlanningRequest
-  ) {
+  async approvePlanning(projectId: string, userId: string) {
     const project = await db.project.findUnique({ where: { id: projectId } });
     if (!project)
       throw new AppError("Project not found", 404, "PROJECT_NOT_FOUND");
@@ -70,13 +63,15 @@ export const agentService = {
       );
     }
 
+    const codingRunId = crypto.randomUUID();
+
     await db.project.update({
       where: { id: projectId },
-      data: { status: "CODING", currentRunId: input.runId }
+      data: { status: "CODING", currentRunId: codingRunId }
     });
 
     const job = await codingQueue.add("coding", {
-      runId: input.runId,
+      runId: codingRunId,
       userId,
       projectId,
       sprintId: project.jiraSprintId,
@@ -87,7 +82,7 @@ export const agentService = {
 
     return {
       jobId: job.id ?? "",
-      runId: input.runId,
+      runId: codingRunId,
       sprintId: project.jiraSprintId
     };
   }

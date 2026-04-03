@@ -14,11 +14,7 @@ export const agentController = {
 
   async approvePlanning(req: Request, res: Response) {
     const { id } = req.params as { id: string };
-    const result = await agentService.approvePlanning(
-      id,
-      res.locals.user.id,
-      req.body
-    );
+    const result = await agentService.approvePlanning(id, res.locals.user.id);
     res.status(201).json(result);
   }
 };

@@ -1,7 +1,6 @@
 import type { OpenAPIRegistry } from "@asteasolutions/zod-to-openapi";
 import {
   ZAgentJobResponse,
-  ZApprovePlanningRequest,
   ZApprovePlanningResponse,
   ZStartPlanningRequest
 } from "@repo/zod/agent";
@@ -47,15 +46,8 @@ export function registerAgentPaths(registry: OpenAPIRegistry) {
     summary: "Approve planning — start coding after reviewing Jira tickets",
     description:
       "User has reviewed the generated Jira tickets and approves coding to begin. " +
-      "Enqueues a coding job that implements tickets from the sprint one by one.",
+      "The backend generates a new runId for the coding job. No request body required.",
     security: cookieAuth,
-    request: {
-      body: {
-        content: {
-          "application/json": { schema: ZApprovePlanningRequest }
-        }
-      }
-    },
     responses: {
       201: {
         description: "Coding job enqueued",

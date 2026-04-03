@@ -16,7 +16,9 @@ import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
 import { Route as AuthVerifyRouteImport } from './routes/auth/verify'
 import { Route as AuthSignupRouteImport } from './routes/auth/signup'
 import { Route as AuthSigninRouteImport } from './routes/auth/signin'
-import { Route as DashboardProjectsIdRouteImport } from './routes/dashboard/projects/$id'
+import { Route as DashboardProjectsIdRouteRouteImport } from './routes/dashboard/projects/$id/route'
+import { Route as DashboardProjectsIdIndexRouteImport } from './routes/dashboard/projects/$id/index'
+import { Route as DashboardProjectsIdJiraRouteImport } from './routes/dashboard/projects/$id/jira'
 
 const DashboardRouteRoute = DashboardRouteRouteImport.update({
   id: '/dashboard',
@@ -53,10 +55,22 @@ const AuthSigninRoute = AuthSigninRouteImport.update({
   path: '/signin',
   getParentRoute: () => AuthRouteRoute,
 } as any)
-const DashboardProjectsIdRoute = DashboardProjectsIdRouteImport.update({
-  id: '/projects/$id',
-  path: '/projects/$id',
-  getParentRoute: () => DashboardRouteRoute,
+const DashboardProjectsIdRouteRoute =
+  DashboardProjectsIdRouteRouteImport.update({
+    id: '/projects/$id',
+    path: '/projects/$id',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
+const DashboardProjectsIdIndexRoute =
+  DashboardProjectsIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => DashboardProjectsIdRouteRoute,
+  } as any)
+const DashboardProjectsIdJiraRoute = DashboardProjectsIdJiraRouteImport.update({
+  id: '/jira',
+  path: '/jira',
+  getParentRoute: () => DashboardProjectsIdRouteRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -67,7 +81,9 @@ export interface FileRoutesByFullPath {
   '/auth/signup': typeof AuthSignupRoute
   '/auth/verify': typeof AuthVerifyRoute
   '/dashboard/': typeof DashboardIndexRoute
-  '/dashboard/projects/$id': typeof DashboardProjectsIdRoute
+  '/dashboard/projects/$id': typeof DashboardProjectsIdRouteRouteWithChildren
+  '/dashboard/projects/$id/jira': typeof DashboardProjectsIdJiraRoute
+  '/dashboard/projects/$id/': typeof DashboardProjectsIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -76,7 +92,8 @@ export interface FileRoutesByTo {
   '/auth/signup': typeof AuthSignupRoute
   '/auth/verify': typeof AuthVerifyRoute
   '/dashboard': typeof DashboardIndexRoute
-  '/dashboard/projects/$id': typeof DashboardProjectsIdRoute
+  '/dashboard/projects/$id/jira': typeof DashboardProjectsIdJiraRoute
+  '/dashboard/projects/$id': typeof DashboardProjectsIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -87,7 +104,9 @@ export interface FileRoutesById {
   '/auth/signup': typeof AuthSignupRoute
   '/auth/verify': typeof AuthVerifyRoute
   '/dashboard/': typeof DashboardIndexRoute
-  '/dashboard/projects/$id': typeof DashboardProjectsIdRoute
+  '/dashboard/projects/$id': typeof DashboardProjectsIdRouteRouteWithChildren
+  '/dashboard/projects/$id/jira': typeof DashboardProjectsIdJiraRoute
+  '/dashboard/projects/$id/': typeof DashboardProjectsIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -100,6 +119,8 @@ export interface FileRouteTypes {
     | '/auth/verify'
     | '/dashboard/'
     | '/dashboard/projects/$id'
+    | '/dashboard/projects/$id/jira'
+    | '/dashboard/projects/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -108,6 +129,7 @@ export interface FileRouteTypes {
     | '/auth/signup'
     | '/auth/verify'
     | '/dashboard'
+    | '/dashboard/projects/$id/jira'
     | '/dashboard/projects/$id'
   id:
     | '__root__'
@@ -119,6 +141,8 @@ export interface FileRouteTypes {
     | '/auth/verify'
     | '/dashboard/'
     | '/dashboard/projects/$id'
+    | '/dashboard/projects/$id/jira'
+    | '/dashboard/projects/$id/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -182,8 +206,22 @@ declare module '@tanstack/react-router' {
       id: '/dashboard/projects/$id'
       path: '/projects/$id'
       fullPath: '/dashboard/projects/$id'
-      preLoaderRoute: typeof DashboardProjectsIdRouteImport
+      preLoaderRoute: typeof DashboardProjectsIdRouteRouteImport
       parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/projects/$id/': {
+      id: '/dashboard/projects/$id/'
+      path: '/'
+      fullPath: '/dashboard/projects/$id/'
+      preLoaderRoute: typeof DashboardProjectsIdIndexRouteImport
+      parentRoute: typeof DashboardProjectsIdRouteRoute
+    }
+    '/dashboard/projects/$id/jira': {
+      id: '/dashboard/projects/$id/jira'
+      path: '/jira'
+      fullPath: '/dashboard/projects/$id/jira'
+      preLoaderRoute: typeof DashboardProjectsIdJiraRouteImport
+      parentRoute: typeof DashboardProjectsIdRouteRoute
     }
   }
 }
@@ -204,14 +242,30 @@ const AuthRouteRouteWithChildren = AuthRouteRoute._addFileChildren(
   AuthRouteRouteChildren,
 )
 
+interface DashboardProjectsIdRouteRouteChildren {
+  DashboardProjectsIdJiraRoute: typeof DashboardProjectsIdJiraRoute
+  DashboardProjectsIdIndexRoute: typeof DashboardProjectsIdIndexRoute
+}
+
+const DashboardProjectsIdRouteRouteChildren: DashboardProjectsIdRouteRouteChildren =
+  {
+    DashboardProjectsIdJiraRoute: DashboardProjectsIdJiraRoute,
+    DashboardProjectsIdIndexRoute: DashboardProjectsIdIndexRoute,
+  }
+
+const DashboardProjectsIdRouteRouteWithChildren =
+  DashboardProjectsIdRouteRoute._addFileChildren(
+    DashboardProjectsIdRouteRouteChildren,
+  )
+
 interface DashboardRouteRouteChildren {
   DashboardIndexRoute: typeof DashboardIndexRoute
-  DashboardProjectsIdRoute: typeof DashboardProjectsIdRoute
+  DashboardProjectsIdRouteRoute: typeof DashboardProjectsIdRouteRouteWithChildren
 }
 
 const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
   DashboardIndexRoute: DashboardIndexRoute,
-  DashboardProjectsIdRoute: DashboardProjectsIdRoute,
+  DashboardProjectsIdRouteRoute: DashboardProjectsIdRouteRouteWithChildren,
 }
 
 const DashboardRouteRouteWithChildren = DashboardRouteRoute._addFileChildren(

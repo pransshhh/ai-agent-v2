@@ -1,4 +1,4 @@
-import { ZApprovePlanningRequest, ZStartPlanningRequest } from "@repo/zod";
+import { ZStartPlanningRequest } from "@repo/zod";
 import {
   ZCreateProjectRequest,
   ZLinkJiraRequest,
@@ -61,6 +61,6 @@ projectRouter.post(
 
 projectRouter.post(
   "/:id/agent/planning/approve",
-  validate({ params: ZProjectIdParam, body: ZApprovePlanningRequest }),
+  validate({ params: ZProjectIdParam }),
   agentController.approvePlanning
 );
