@@ -2,8 +2,8 @@ import type { ProjectStatus } from "@repo/zod/project";
 import { ZCreateProjectRequest } from "@repo/zod/project";
 import { useForm } from "@tanstack/react-form";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { FolderOpen, Plus } from "lucide-react";
-import { useState } from "react";
+import { FolderOpen, Loader2, Plus, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,7 +24,11 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useCreateProject, useProjects } from "@/hooks/use-projects";
+import {
+  useCreateProject,
+  useDeleteProject,
+  useProjects
+} from "@/hooks/use-projects";
 
 const STATUS_CONFIG: Record<
   ProjectStatus,
@@ -44,12 +48,50 @@ const STATUS_CONFIG: Record<
   PLANNING: { label: "Planning", variant: "warning" },
   PLANNED: { label: "Planned", variant: "purple" },
   CODING: { label: "Coding", variant: "info" },
+  SPRINT_REVIEW: { label: "Sprint Review", variant: "success" },
   FAILED: { label: "Failed", variant: "destructive" }
 };
 
 function StatusBadge({ status }: { status: ProjectStatus }) {
   const { label, variant } = STATUS_CONFIG[status];
   return <Badge variant={variant}>{label}</Badge>;
+}
+
+function DeleteProjectButton({ projectId }: { projectId: string }) {
+  const [confirming, setConfirming] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { mutate: deleteProject, isPending } = useDeleteProject(projectId);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!confirming) {
+      setConfirming(true);
+      timeoutRef.current = setTimeout(() => setConfirming(false), 3000);
+      return;
+    }
+
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    deleteProject();
+  };
+
+  return (
+    <Button
+      variant={confirming ? "destructive" : "ghost"}
+      size="icon"
+      className="size-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+      disabled={isPending}
+      onClick={handleClick}
+      title={confirming ? "Click again to confirm" : "Delete project"}
+    >
+      {isPending ? (
+        <Loader2 className="size-3.5 animate-spin" />
+      ) : (
+        <Trash2 className="size-3.5" />
+      )}
+    </Button>
+  );
 }
 
 function NewProjectDialog() {
@@ -230,38 +272,44 @@ export const Route = createFileRoute("/dashboard/")({
           ) : (
             <div className="space-y-2">
               {projects.map((project) => (
-                <Link
-                  key={project.id}
-                  to="/dashboard/projects/$id"
-                  params={{ id: project.id }}
-                  className="group block"
-                >
-                  <Card className="transition-colors hover:bg-accent/50 cursor-pointer">
-                    <CardContent className="flex items-center justify-between py-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {project.name}
-                          </p>
-                          {project.description && (
-                            <p className="text-xs text-muted-foreground truncate mt-0.5">
-                              {project.description}
+                <div key={project.id} className="group relative">
+                  <Link
+                    to="/dashboard/projects/$id"
+                    params={{ id: project.id }}
+                    className="block"
+                  >
+                    <Card className="transition-colors hover:bg-accent/50 cursor-pointer">
+                      <CardContent className="flex items-center justify-between py-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {project.name}
                             </p>
-                          )}
+                            {project.description && (
+                              <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                {project.description}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0 ml-4">
-                        <StatusBadge status={project.status} />
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(project.createdAt).toLocaleDateString(
-                            "en-US",
-                            { month: "short", day: "numeric", year: "numeric" }
-                          )}
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
+                        <div className="flex items-center gap-3 shrink-0 ml-4">
+                          <StatusBadge status={project.status} />
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(project.createdAt).toLocaleDateString(
+                              "en-US",
+                              {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric"
+                              }
+                            )}
+                          </span>
+                          <DeleteProjectButton projectId={project.id} />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                </div>
               ))}
             </div>
           )}

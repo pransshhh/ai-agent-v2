@@ -76,6 +76,7 @@ enum ProjectStatus {
   PLANNING
   PLANNED
   CODING
+  SPRINT_REVIEW
   FAILED
 }
 

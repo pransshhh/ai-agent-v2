@@ -3,7 +3,6 @@ import type { CodingJobPayload } from "@repo/queue";
 import { QUEUE_NAMES } from "@repo/queue";
 import { Worker } from "bullmq";
 import { codingGraph } from "../graphs/coding/graph";
-import { jira } from "../lib/jira";
 import { logger } from "../lib/logger";
 import { redisConnection } from "../lib/redis";
 
@@ -16,24 +15,18 @@ export function startCodingWorker() {
       logger.info({ jobId: job.id, runId }, "Coding job started");
 
       try {
-        const startDate = new Date();
-        const endDate = new Date();
-        endDate.setDate(endDate.getDate() + 14);
-        await jira.sprints.updateSprint(job.data.sprintId, {
-          state: "active",
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString()
-        });
-        logger.info({ sprintId: job.data.sprintId }, "Sprint started");
-
         const result = await codingGraph.invoke({
           runId,
           userId: job.data.userId,
           projectId,
+          jiraProjectKey: job.data.jiraProjectKey,
+          jiraBoardId: job.data.jiraBoardId,
           sprintId: job.data.sprintId,
           s3Prefix: job.data.s3Prefix,
           aiProvider: job.data.aiProvider,
-          aiApiKey: job.data.aiApiKey
+          aiApiKey: job.data.aiApiKey,
+          rejectedTicketKey: job.data.rejectedTicketKey ?? null,
+          rejectedTicketFeedback: job.data.rejectedTicketFeedback ?? null
         });
 
         if (result.status === "failed") {
@@ -44,13 +37,10 @@ export function startCodingWorker() {
           throw new Error(result.error ?? "Coding graph failed");
         }
 
-        // Back to IDLE if all tickets succeeded, FAILED otherwise
-        const finalStatus =
-          result.failedTickets?.length > 0 ? "FAILED" : "IDLE";
-
+        // Pause for HIL sprint review — frontend will call sprint/approve or sprint/reject
         await db.project.update({
           where: { id: projectId },
-          data: { status: finalStatus, currentRunId: null }
+          data: { status: "SPRINT_REVIEW", currentRunId: null }
         });
 
         logger.info(
@@ -58,10 +48,9 @@ export function startCodingWorker() {
             jobId: job.id,
             runId,
             completedTickets: result.completedTickets,
-            failedTickets: result.failedTickets,
-            finalStatus
+            failedTickets: result.failedTickets
           },
-          "Coding job completed"
+          "Coding job completed — awaiting HIL sprint review"
         );
 
         return result;

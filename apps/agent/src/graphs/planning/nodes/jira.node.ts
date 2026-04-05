@@ -1,6 +1,6 @@
 import { createModel, stepCountIs, ToolLoopAgent, tool } from "@repo/ai";
 import { z } from "zod";
-import { jira } from "../../../lib/jira";
+import { createJira } from "../../../lib/jira";
 import { logger } from "../../../lib/logger";
 import type { PlanningStateType } from "../state";
 
@@ -8,6 +8,8 @@ export async function jiraNode(
   state: PlanningStateType
 ): Promise<Partial<PlanningStateType>> {
   logger.info({ runId: state.runId }, "Jira node started");
+
+  const jira = createJira(state.jiraProjectKey, state.jiraBoardId);
 
   const model = createModel({
     provider: state.aiProvider,
@@ -37,7 +39,7 @@ export async function jiraNode(
     }),
 
     createStory: tool({
-      description: "Create a Jira story under an epic",
+      description: "Create a Jira story under an epic (goes to backlog)",
       inputSchema: z.object({
         summary: z.string(),
         description: z.string(),
@@ -52,7 +54,8 @@ export async function jiraNode(
           description,
           type: "Story",
           priority,
-          epicKey
+          epicKey,
+          labels: [`ai-agent-${state.projectId}`]
         });
 
         logger.info(
@@ -65,7 +68,7 @@ export async function jiraNode(
     }),
 
     createTask: tool({
-      description: "Create a Jira task",
+      description: "Create a Jira task (goes to backlog)",
       inputSchema: z.object({
         summary: z.string(),
         description: z.string(),
@@ -78,7 +81,8 @@ export async function jiraNode(
           summary,
           description,
           type: "Task",
-          priority
+          priority,
+          labels: [`ai-agent-${state.projectId}`]
         });
 
         logger.info(
@@ -87,27 +91,6 @@ export async function jiraNode(
         );
 
         return { key: issue.key, summary: issue.summary };
-      }
-    }),
-
-    createSprint: tool({
-      description: "Create sprint and assign issues",
-      inputSchema: z.object({
-        name: z.string(),
-        goal: z.string(),
-        issueKeys: z.array(z.string())
-      }),
-      execute: async ({ name, goal, issueKeys }) => {
-        const sprint = await jira.sprints.createSprint({ name, goal });
-
-        await jira.sprints.moveIssuesToSprint(sprint.id, issueKeys);
-
-        logger.info(
-          { runId: state.runId, sprintId: sprint.id },
-          "Sprint created"
-        );
-
-        return { sprintId: sprint.id, name: sprint.name };
       }
     })
   };
@@ -121,23 +104,22 @@ Rules:
 - Only use tool calls
 - Create 2–5 epics
 - Each epic → 3–8 stories/tasks
-- Call createSprint EXACTLY ONCE, only after ALL epics and stories are created
-- Pass ALL created ticket keys to createSprint in the issueKeys array
-- Do NOT call createSprint more than once under any circumstances
+- ALL tickets go to the backlog — do NOT create sprints
+- Order stories within each epic by implementation sequence (foundational work first)
+- Write detailed descriptions so a developer can implement without ambiguity
 
 Project:
 ${state.prompt}`;
 
   const epicKeys: string[] = [];
   const ticketKeys: string[] = [];
-  let sprintId: number | null = null;
 
   try {
     const agent = new ToolLoopAgent({
       model,
       tools,
       instructions,
-      stopWhen: stepCountIs(40) // 👈 important
+      stopWhen: stepCountIs(40)
     });
 
     await agent.generate({
@@ -164,23 +146,18 @@ ${state.prompt}`;
               ticketKeys.push(output.key);
             }
           }
-
-          if ("sprintId" in output && typeof output.sprintId === "number") {
-            sprintId = output.sprintId;
-          }
         }
       }
     });
 
     logger.info(
-      { runId: state.runId, epicKeys, ticketKeys, sprintId },
-      "Jira node completed"
+      { runId: state.runId, epicKeys, ticketKeys },
+      "Jira node completed — all tickets in backlog"
     );
 
     return {
       epicKeys,
       ticketKeys,
-      sprintId,
       status: "done"
     };
   } catch (err) {

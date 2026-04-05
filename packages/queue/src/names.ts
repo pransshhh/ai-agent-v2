@@ -1,5 +1,6 @@
 export const QUEUE_NAMES = {
   PLANNING: "planning",
+  SPRINT_PLANNING: "sprint-planning",
   CODING: "coding"
 } as const;
 

@@ -9,6 +9,8 @@ export const PlanningState = Annotation.Root({
   runId: Annotation<string>,
   userId: Annotation<string>,
   projectId: Annotation<string>,
+  jiraProjectKey: Annotation<string>,
+  jiraBoardId: Annotation<number>,
   prompt: Annotation<string>,
   aiProvider: Annotation<"anthropic" | "gemini" | "openai">,
   aiApiKey: Annotation<string>,
@@ -17,10 +19,6 @@ export const PlanningState = Annotation.Root({
   epicKeys: Annotation<string[]>({
     default: () => [],
     reducer: (a, b) => [...a, ...b]
-  }),
-  sprintId: Annotation<number | null>({
-    default: () => null,
-    reducer: (_, b) => b
   }),
   ticketKeys: Annotation<string[]>({
     default: () => [],

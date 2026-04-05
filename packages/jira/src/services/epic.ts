@@ -1,4 +1,13 @@
 import type { Version3Client, Version3Models } from "jira.js";
+
+function toAdf(text: string) {
+  return {
+    type: "doc",
+    version: 1,
+    content: [{ type: "paragraph", content: [{ type: "text", text }] }]
+  };
+}
+
 import type {
   CreateEpicInput,
   IssuePriority,
@@ -24,7 +33,7 @@ export function createEpicService(v3: Version3Client, config: JiraConfig) {
         project: { key: config.projectKey },
         summary: input.summary,
         issuetype: { name: "Epic" },
-        ...(input.description ? { description: input.description } : {}),
+        ...(input.description ? { description: toAdf(input.description) } : {}),
         ...(input.priority ? { priority: { name: input.priority } } : {})
       };
 

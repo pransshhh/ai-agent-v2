@@ -6,6 +6,7 @@ import {
   ZCreateSprintRequest,
   ZEpicKeyParam,
   ZIssueKeyParam,
+  ZJiraProjectQuery,
   ZListSprintsQuery,
   ZMoveIssuesToSprintRequest,
   ZSprintIdParam,
@@ -21,7 +22,11 @@ export const jiraRouter: Router = Router();
 
 jiraRouter.use(requireAuth);
 
-jiraRouter.get("/boards", jiraController.listBoards);
+jiraRouter.get(
+  "/backlog",
+  validate({ query: ZJiraProjectQuery }),
+  jiraController.getBacklogIssues
+);
 
 jiraRouter.get(
   "/sprints",
@@ -29,76 +34,100 @@ jiraRouter.get(
   jiraController.listSprints
 );
 
-jiraRouter.get("/sprints/active", jiraController.getActiveSprint);
+jiraRouter.get(
+  "/sprints/active",
+  validate({ query: ZJiraProjectQuery }),
+  jiraController.getActiveSprint
+);
 
 jiraRouter.post(
   "/sprints",
-  validate({ body: ZCreateSprintRequest }),
+  validate({ query: ZJiraProjectQuery, body: ZCreateSprintRequest }),
   jiraController.createSprint
 );
 
 jiraRouter.patch(
   "/sprints/:sprintId",
-  validate({ params: ZSprintIdParam, body: ZUpdateSprintRequest }),
+  validate({
+    params: ZSprintIdParam,
+    query: ZJiraProjectQuery,
+    body: ZUpdateSprintRequest
+  }),
   jiraController.updateSprint
 );
 
 jiraRouter.post(
   "/sprints/:sprintId/issues",
-  validate({ params: ZSprintIdParam, body: ZMoveIssuesToSprintRequest }),
+  validate({
+    params: ZSprintIdParam,
+    query: ZJiraProjectQuery,
+    body: ZMoveIssuesToSprintRequest
+  }),
   jiraController.moveIssuesToSprint
 );
 
 jiraRouter.get(
   "/sprints/:sprintId/issues",
-  validate({ params: ZSprintIdParam }),
+  validate({ params: ZSprintIdParam, query: ZJiraProjectQuery }),
   jiraController.getSprintIssues
 );
 
 jiraRouter.post(
   "/issues",
-  validate({ body: ZCreateIssueRequest }),
+  validate({ query: ZJiraProjectQuery, body: ZCreateIssueRequest }),
   jiraController.createIssue
 );
 
 jiraRouter.get(
   "/issues/:issueKey",
-  validate({ params: ZIssueKeyParam }),
+  validate({ params: ZIssueKeyParam, query: ZJiraProjectQuery }),
   jiraController.getIssue
 );
 
 jiraRouter.patch(
   "/issues/:issueKey",
-  validate({ params: ZIssueKeyParam, body: ZUpdateIssueRequest }),
+  validate({
+    params: ZIssueKeyParam,
+    query: ZJiraProjectQuery,
+    body: ZUpdateIssueRequest
+  }),
   jiraController.updateIssue
 );
 
 jiraRouter.post(
   "/issues/:issueKey/close",
-  validate({ params: ZIssueKeyParam }),
+  validate({ params: ZIssueKeyParam, query: ZJiraProjectQuery }),
   jiraController.closeIssue
 );
 
 jiraRouter.post(
   "/issues/:issueKey/assign",
-  validate({ params: ZIssueKeyParam, body: ZAssignIssueRequest }),
+  validate({
+    params: ZIssueKeyParam,
+    query: ZJiraProjectQuery,
+    body: ZAssignIssueRequest
+  }),
   jiraController.assignIssue
 );
 
 jiraRouter.post(
   "/issues/:issueKey/comments",
-  validate({ params: ZIssueKeyParam, body: ZAddCommentRequest }),
+  validate({
+    params: ZIssueKeyParam,
+    query: ZJiraProjectQuery,
+    body: ZAddCommentRequest
+  }),
   jiraController.addComment
 );
 
 jiraRouter.post(
   "/epics",
-  validate({ body: ZCreateEpicRequest }),
+  validate({ query: ZJiraProjectQuery, body: ZCreateEpicRequest }),
   jiraController.createEpic
 );
 
 jiraRouter.get(
   "/epics/:epicKey/issues",
-  validate({ params: ZEpicKeyParam }),
+  validate({ params: ZEpicKeyParam, query: ZJiraProjectQuery }),
   jiraController.getEpicIssues
 );

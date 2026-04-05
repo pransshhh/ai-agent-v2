@@ -14,8 +14,6 @@ const envSchema = z.object({
   JIRA_BASE_URL: z.url(),
   JIRA_EMAIL: z.email(),
   JIRA_API_TOKEN: z.string().min(1),
-  JIRA_PROJECT_KEY: z.string().min(1),
-  JIRA_BOARD_ID: z.coerce.number(),
   GOOGLE_GENERATIVE_AI_API_KEY: z.string(),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),

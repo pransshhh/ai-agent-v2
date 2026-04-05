@@ -9,6 +9,8 @@ export const CodingState = Annotation.Root({
   runId: Annotation<string>,
   userId: Annotation<string>,
   projectId: Annotation<string>,
+  jiraProjectKey: Annotation<string>,
+  jiraBoardId: Annotation<number>,
   sprintId: Annotation<number>,
   s3Prefix: Annotation<string>,
   aiProvider: Annotation<"anthropic" | "gemini" | "openai">,
@@ -36,6 +38,16 @@ export const CodingState = Annotation.Root({
   failedTickets: Annotation<string[]>({
     default: () => [],
     reducer: (a, b) => [...a, ...b]
+  }),
+
+  // HIL rejection context — set when this is a retry run
+  rejectedTicketKey: Annotation<string | null>({
+    default: () => null,
+    reducer: (_, b) => b
+  }),
+  rejectedTicketFeedback: Annotation<string | null>({
+    default: () => null,
+    reducer: (_, b) => b
   }),
 
   // Working directory on the agent server

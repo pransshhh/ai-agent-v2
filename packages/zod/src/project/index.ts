@@ -8,6 +8,7 @@ export const ZProjectStatus = z.enum([
   "PLANNING",
   "PLANNED",
   "CODING",
+  "SPRINT_REVIEW",
   "FAILED"
 ]);
 

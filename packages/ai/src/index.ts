@@ -5,7 +5,13 @@ export type {
   Tool,
   ToolSet
 } from "ai";
-export { stepCountIs, streamText, ToolLoopAgent, tool } from "ai";
+export {
+  generateObject,
+  stepCountIs,
+  streamText,
+  ToolLoopAgent,
+  tool
+} from "ai";
 export { createModel } from "./model";
 export { createAnthropicModel } from "./providers/anthropic";
 export { createGeminiModel } from "./providers/gemini";

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   useActiveSprint,
+  useBacklogIssues,
   useFutureSprints,
   useSprintIssues
 } from "@/hooks/use-jira";
@@ -47,9 +48,16 @@ function IssueRow({ issue }: { issue: JiraIssue }) {
   );
 }
 
-function SprintSection({ sprint }: { sprint: JiraSprint }) {
+function SprintSection({
+  sprint,
+  projectId
+}: {
+  sprint: JiraSprint;
+  projectId: string;
+}) {
   const [expanded, setExpanded] = useState(true);
   const { data: issues, isLoading } = useSprintIssues(
+    projectId,
     expanded ? sprint.id : undefined
   );
 
@@ -99,8 +107,13 @@ function SprintSection({ sprint }: { sprint: JiraSprint }) {
   );
 }
 
-function BacklogTab() {
-  const { data: sprints, isLoading } = useFutureSprints();
+function BacklogTab({ projectId }: { projectId: string }) {
+  const { data: backlogIssues, isLoading: loadingBacklog } =
+    useBacklogIssues(projectId);
+  const { data: futureSprints, isLoading: loadingSprints } =
+    useFutureSprints(projectId);
+
+  const isLoading = loadingBacklog || loadingSprints;
 
   if (isLoading) {
     return (
@@ -110,22 +123,58 @@ function BacklogTab() {
     );
   }
 
-  if (!sprints?.length) {
+  const hasBacklog = (backlogIssues?.length ?? 0) > 0;
+  const hasFutureSprints = (futureSprints?.length ?? 0) > 0;
+
+  if (!hasBacklog && !hasFutureSprints) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-16">
-        <p className="text-sm font-medium">No sprints in backlog</p>
+        <p className="text-sm font-medium">Backlog is empty</p>
         <p className="text-xs text-muted-foreground">
-          Future sprints will appear here once the planning agent creates them.
+          Tickets will appear here once the planning agent runs.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-3 p-6">
-      {sprints.map((sprint) => (
-        <SprintSection key={sprint.id} sprint={sprint} />
-      ))}
+    <div className="flex flex-col gap-6 p-6">
+      {hasBacklog && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 px-1">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Backlog
+            </span>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              {backlogIssues?.length}
+            </span>
+          </div>
+          <div className="overflow-hidden rounded-lg border">
+            <div className="px-2 py-2">
+              {backlogIssues?.map((issue) => (
+                <IssueRow key={issue.id} issue={issue} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {hasFutureSprints && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 px-1">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Future Sprints
+            </span>
+          </div>
+          {futureSprints?.map((sprint) => (
+            <SprintSection
+              key={sprint.id}
+              sprint={sprint}
+              projectId={projectId}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -174,9 +223,11 @@ function KanbanColumn({
   );
 }
 
-function BoardTab() {
-  const { data: activeSprint, isLoading: loadingSprint } = useActiveSprint();
+function BoardTab({ projectId }: { projectId: string }) {
+  const { data: activeSprint, isLoading: loadingSprint } =
+    useActiveSprint(projectId);
   const { data: issues, isLoading: loadingIssues } = useSprintIssues(
+    projectId,
     activeSprint?.id
   );
 
@@ -273,7 +324,11 @@ function JiraPage({ id }: { id: string }) {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {tab === "backlog" ? <BacklogTab /> : <BoardTab />}
+        {tab === "backlog" ? (
+          <BacklogTab projectId={id} />
+        ) : (
+          <BoardTab projectId={id} />
+        )}
       </div>
     </div>
   );

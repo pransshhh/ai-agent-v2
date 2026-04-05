@@ -7,12 +7,23 @@ import {
   Check,
   ExternalLink,
   Loader2,
+  RotateCcw,
   Send,
-  User2
+  User2,
+  X
 } from "lucide-react";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogRoot,
+  DialogTitle,
+  DialogTrigger
+} from "@/components/ui/dialog";
 import {
   Field,
   FieldError,
@@ -21,10 +32,15 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useFutureSprints } from "@/hooks/use-jira";
 import {
   useApprovePlanning,
+  useApproveSprintReview,
   useLinkJira,
   useProject,
+  useRejectSprintReview,
+  useResetProject,
+  useStartCoding,
   useStartPlanning
 } from "@/hooks/use-projects";
 import { cn } from "@/lib/utils";
@@ -34,7 +50,10 @@ type ChatMessage = {
   role: "user" | "agent";
   content: string;
   isLoading?: boolean;
-  action?: { type: "approve" };
+  action?:
+    | { type: "approve-planning" }
+    | { type: "start-coding" }
+    | { type: "sprint-review" };
 };
 
 type LogEntry = {
@@ -61,10 +80,11 @@ const STATUS_BADGE: Record<
   PLANNING: { label: "Planning", variant: "warning" },
   PLANNED: { label: "Planned", variant: "purple" },
   CODING: { label: "Coding", variant: "info" },
+  SPRINT_REVIEW: { label: "Sprint Review", variant: "success" },
   FAILED: { label: "Failed", variant: "destructive" }
 };
 
-const TIMELINE: Exclude<ProjectStatus, "FAILED">[] = [
+const TIMELINE: Exclude<ProjectStatus, "FAILED" | "SPRINT_REVIEW">[] = [
   "IDLE",
   "PLANNING",
   "PLANNED",
@@ -79,9 +99,10 @@ const TIMELINE_LABELS: Record<string, string> = {
 
 function StatusTimeline({ status }: { status: ProjectStatus }) {
   const isFailed = status === "FAILED";
-  const effective = isFailed ? "CODING" : status;
+  const isReview = status === "SPRINT_REVIEW";
+  const effective = isFailed || isReview ? "CODING" : status;
   const currentIdx = TIMELINE.indexOf(
-    effective as Exclude<ProjectStatus, "FAILED">
+    effective as Exclude<ProjectStatus, "FAILED" | "SPRINT_REVIEW">
   );
 
   return (
@@ -137,6 +158,11 @@ function StatusTimeline({ status }: { status: ProjectStatus }) {
           The process encountered an error. Check the logs below.
         </p>
       )}
+      {isReview && (
+        <p className="text-xs text-muted-foreground text-center">
+          Sprint complete — awaiting your review.
+        </p>
+      )}
     </div>
   );
 }
@@ -149,7 +175,8 @@ function LogsPanel({
   logs: LogEntry[];
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
-  const isRunning = status === "PLANNING" || status === "CODING";
+  const isRunning =
+    status === "PLANNING" || status === "CODING" || status === "SPRINT_REVIEW";
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: needed for scroll
   useEffect(() => {
@@ -211,17 +238,207 @@ function LogsPanel({
   );
 }
 
+function RejectDialog({
+  onReject
+}: {
+  onReject: (data: { issueKey: string; feedback: string }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [issueKey, setIssueKey] = useState("");
+  const [feedback, setFeedback] = useState("");
+  const [errors, setErrors] = useState<{
+    issueKey?: string;
+    feedback?: string;
+  }>({});
+
+  const handleSubmit = () => {
+    const e: typeof errors = {};
+    if (!issueKey.trim()) e.issueKey = "Issue key is required";
+    if (!feedback.trim()) e.feedback = "Feedback is required";
+    if (Object.keys(e).length) {
+      setErrors(e);
+      return;
+    }
+    onReject({ issueKey: issueKey.trim(), feedback: feedback.trim() });
+    setOpen(false);
+    setIssueKey("");
+    setFeedback("");
+    setErrors({});
+  };
+
+  return (
+    <DialogRoot open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          <Button variant="outline" size="sm">
+            <X className="size-3.5" />
+            Reject a Ticket
+          </Button>
+        }
+      />
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Reject Sprint Ticket</DialogTitle>
+          <DialogDescription>
+            Specify which ticket failed review and why. The ticket and all
+            subsequent tickets in the sprint will be reset and re-implemented.
+          </DialogDescription>
+        </DialogHeader>
+        <FieldGroup>
+          <Field data-invalid={!!errors.issueKey}>
+            <FieldLabel htmlFor="issue-key">Issue Key</FieldLabel>
+            <Input
+              id="issue-key"
+              placeholder="e.g. MYAPP-3"
+              value={issueKey}
+              onChange={(e) => {
+                setIssueKey(e.target.value.toUpperCase());
+                setErrors((p) => ({ ...p, issueKey: undefined }));
+              }}
+              className="font-mono"
+            />
+            {errors.issueKey && (
+              <FieldError errors={[{ message: errors.issueKey }]} />
+            )}
+          </Field>
+          <Field data-invalid={!!errors.feedback}>
+            <FieldLabel htmlFor="reject-feedback">Feedback</FieldLabel>
+            <Textarea
+              id="reject-feedback"
+              placeholder="Describe what's wrong and what the agent should fix..."
+              value={feedback}
+              onChange={(e) => {
+                setFeedback(e.target.value);
+                setErrors((p) => ({ ...p, feedback: undefined }));
+              }}
+              rows={4}
+              className="resize-none"
+            />
+            {errors.feedback && (
+              <FieldError errors={[{ message: errors.feedback }]} />
+            )}
+          </Field>
+        </FieldGroup>
+        <DialogFooter>
+          <Button variant="destructive" onClick={handleSubmit}>
+            Reject &amp; Retry
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </DialogRoot>
+  );
+}
+
+function StartCodingDialog({
+  projectId,
+  onSuccess
+}: {
+  projectId: string;
+  onSuccess: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [selectedSprintId, setSelectedSprintId] = useState<number | null>(null);
+  const { data: sprints, isLoading: sprintsLoading } =
+    useFutureSprints(projectId);
+  const { mutate: startCoding, isPending } = useStartCoding(projectId);
+
+  const handleStart = () => {
+    if (!selectedSprintId) return;
+    startCoding(
+      { sprintId: selectedSprintId },
+      {
+        onSuccess: () => {
+          setOpen(false);
+          setSelectedSprintId(null);
+          onSuccess();
+        }
+      }
+    );
+  };
+
+  return (
+    <DialogRoot open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          <Button size="sm">
+            <Check className="size-3.5" />
+            Start Coding Sprint
+          </Button>
+        }
+      />
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Start Coding Sprint</DialogTitle>
+          <DialogDescription>
+            Select a future sprint from your Jira board. The coding agent will
+            implement all tickets in it.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
+          {sprintsLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="size-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : !sprints || sprints.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No future sprints found. Create one in Jira first.
+            </p>
+          ) : (
+            sprints.map((sprint) => (
+              <button
+                key={sprint.id}
+                type="button"
+                onClick={() => setSelectedSprintId(sprint.id ?? null)}
+                className={cn(
+                  "flex flex-col gap-0.5 rounded-lg border px-4 py-3 text-left transition-colors hover:bg-muted",
+                  selectedSprintId === sprint.id &&
+                    "border-primary bg-primary/5"
+                )}
+              >
+                <span className="text-sm font-medium">{sprint.name}</span>
+                {sprint.goal && (
+                  <span className="text-xs text-muted-foreground">
+                    {sprint.goal}
+                  </span>
+                )}
+              </button>
+            ))
+          )}
+        </div>
+        <DialogFooter>
+          <Button
+            onClick={handleStart}
+            disabled={!selectedSprintId || isPending}
+          >
+            {isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              "Start Coding"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </DialogRoot>
+  );
+}
+
 function ChatPanel({
   project,
   messages,
   onSendMessage,
   onApprove,
+  onStartCodingSuccess,
+  onApproveSprint,
+  onRejectSprint,
   onLinkJira
 }: {
   project: Project;
   messages: ChatMessage[];
   onSendMessage: (content: string) => void;
   onApprove: () => void;
+  onStartCodingSuccess: () => void;
+  onApproveSprint: () => void;
+  onRejectSprint: (data: { issueKey: string; feedback: string }) => void;
   onLinkJira: (key: string) => void;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -230,7 +447,10 @@ function ChatPanel({
   const isJiraLinked = !!project.jiraProjectKey;
   const isRunning =
     project.status === "PLANNING" || project.status === "CODING";
-  const inputDisabled = isRunning || project.status === "PLANNED";
+  const inputDisabled =
+    isRunning ||
+    project.status === "PLANNED" ||
+    project.status === "SPRINT_REVIEW";
 
   const {
     mutate: linkJira,
@@ -304,12 +524,36 @@ function ChatPanel({
                 )}
               </div>
 
-              {msg.action?.type === "approve" &&
+              {msg.action?.type === "approve-planning" &&
                 project.status === "PLANNED" && (
-                  <Button size="sm" onClick={onApprove} className="self-start">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={onApprove}
+                    className="self-start"
+                  >
                     <Check className="size-3.5" />
-                    Approve &amp; Start Coding
+                    Approve Planning
                   </Button>
+                )}
+
+              {msg.action?.type === "start-coding" &&
+                project.status === "PLANNED" && (
+                  <StartCodingDialog
+                    projectId={project.id}
+                    onSuccess={onStartCodingSuccess}
+                  />
+                )}
+
+              {msg.action?.type === "sprint-review" &&
+                project.status === "SPRINT_REVIEW" && (
+                  <div className="flex gap-2 flex-wrap">
+                    <Button size="sm" onClick={onApproveSprint}>
+                      <Check className="size-3.5" />
+                      Approve Sprint
+                    </Button>
+                    <RejectDialog onReject={onRejectSprint} />
+                  </div>
                 )}
             </div>
           </div>
@@ -363,7 +607,11 @@ function ChatPanel({
                         </linkForm.Subscribe>
                       </div>
                       {isInvalid && (
-                        <FieldError errors={field.state.meta.errors} />
+                        <FieldError
+                          errors={field.state.meta.errors.map((e) => ({
+                            message: String(e)
+                          }))}
+                        />
                       )}
                     </Field>
                   );
@@ -380,9 +628,11 @@ function ChatPanel({
               placeholder={
                 project.status === "PLANNED"
                   ? "Approve the plan above to continue..."
-                  : isRunning
-                    ? "Agent is working..."
-                    : "Describe what you want to build..."
+                  : project.status === "SPRINT_REVIEW"
+                    ? "Review the sprint above and approve or reject..."
+                    : isRunning
+                      ? "Agent is working..."
+                      : "Describe what you want to build..."
               }
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -442,8 +692,8 @@ function getInitialMessages(project: Project): ChatMessage[] {
     case "PLANNED":
       return [
         mk(
-          "Planning complete! Your epics, stories, and sprint are ready in Jira. Approve below to kick off the coding agent.",
-          { action: { type: "approve" } }
+          "Planning approved! Review your tickets in Jira, create a sprint, then come back to start coding.",
+          { action: { type: "start-coding" } }
         )
       ];
     case "CODING":
@@ -451,6 +701,13 @@ function getInitialMessages(project: Project): ChatMessage[] {
         mk("Coding is in progress — implementing your tickets one by one...", {
           isLoading: true
         })
+      ];
+    case "SPRINT_REVIEW":
+      return [
+        mk(
+          "Sprint complete! Review the tickets on the Jira board. Approve to move to the next sprint, or reject a ticket (and everything after it) with feedback.",
+          { action: { type: "sprint-review" } }
+        )
       ];
     case "FAILED":
       return [
@@ -478,6 +735,9 @@ function ProjectPage({ id }: { id: string }) {
 
   const { mutate: startPlanning } = useStartPlanning(id);
   const { mutate: approvePlanning } = useApprovePlanning(id);
+  const { mutate: approveSprintReview } = useApproveSprintReview(id);
+  const { mutate: rejectSprintReview } = useRejectSprintReview(id);
+  const { mutate: resetProject, isPending: isResetting } = useResetProject(id);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -509,20 +769,44 @@ function ProjectPage({ id }: { id: string }) {
 
     if (prev === "PLANNING" && project.status === "PLANNED") {
       addMsg(
-        "Planning complete! Your epics, stories, and sprint are ready in Jira. Approve to start coding.",
-        { action: { type: "approve" } }
+        "Planning complete! Your epics and stories are in the Jira backlog. Approve below to confirm.",
+        { action: { type: "approve-planning" } }
       );
-      addLog("Planning complete. Jira tickets created.", "success");
+      addLog("Planning complete. Jira tickets created in backlog.", "success");
     } else if (prev === "PLANNED" && project.status === "CODING") {
-      addMsg("Sprint activated. Starting to implement your tickets...", {
-        isLoading: true
-      });
-      addLog("Sprint activated. Coding agent started.", "info");
+      addMsg("Coding agent is starting on your sprint...", { isLoading: true });
+      addLog("Coding agent started.", "info");
+    } else if (prev === "CODING" && project.status === "SPRINT_REVIEW") {
+      addMsg(
+        "Sprint complete! Review the implemented tickets on the Jira board. Approve to continue with the next sprint, or reject a ticket with feedback.",
+        { action: { type: "sprint-review" } }
+      );
+      addLog("Sprint complete. Awaiting HIL review.", "success");
+    } else if (prev === "SPRINT_REVIEW" && project.status === "CODING") {
+      setMessages((m) => [
+        ...m.filter((x) => !x.isLoading && x.action?.type !== "sprint-review"),
+        {
+          id: crypto.randomUUID(),
+          role: "agent",
+          content: "Review submitted. Agent is processing the next sprint...",
+          isLoading: true
+        }
+      ]);
+      addLog("Sprint review actioned. Coding agent restarted.", "info");
     } else if (prev === "CODING" && project.status === "IDLE") {
       addMsg(
-        "Sprint complete! All tickets implemented. Describe the next sprint or plan more work."
+        "All done! The backlog is empty and all tickets have been implemented."
       );
-      addLog("Sprint complete. All tickets implemented.", "success");
+      addLog("All sprints complete. Project finished.", "success");
+    } else if (prev === "FAILED" && project.status === "PLANNED") {
+      addMsg(
+        "Project reset. Your Jira backlog is ready — pick a sprint to start coding.",
+        { action: { type: "start-coding" } }
+      );
+      addLog("Project reset to PLANNED.", "info");
+    } else if (prev === "FAILED" && project.status === "IDLE") {
+      addMsg("Project reset. Describe what you want to build to start over.");
+      addLog("Project reset to IDLE.", "info");
     } else if (project.status === "FAILED") {
       addMsg("Something went wrong. Check the logs for details.");
       addLog("Process failed.", "error");
@@ -563,6 +847,18 @@ function ProjectPage({ id }: { id: string }) {
 
   const handleApprove = useCallback(() => {
     approvePlanning(undefined, {
+      onSuccess: () => {
+        setMessages((m) => [
+          ...m.filter((x) => x.action?.type !== "approve-planning"),
+          {
+            id: crypto.randomUUID(),
+            role: "agent",
+            content:
+              "Planning approved! Review your tickets in Jira, create a sprint, then come back to start coding.",
+            action: { type: "start-coding" as const }
+          }
+        ]);
+      },
       onError: (err) => {
         setMessages((m) => [
           ...m,
@@ -575,6 +871,54 @@ function ProjectPage({ id }: { id: string }) {
       }
     });
   }, [approvePlanning]);
+
+  const handleApproveSprint = useCallback(() => {
+    setLogs((l) => [
+      ...l,
+      mkLog("Sprint approved. Planning next sprint...", "info")
+    ]);
+    approveSprintReview(undefined, {
+      onError: (err) => {
+        setMessages((m) => [
+          ...m,
+          {
+            id: crypto.randomUUID(),
+            role: "agent",
+            content: `Error: ${err.message}`
+          }
+        ]);
+      }
+    });
+  }, [approveSprintReview]);
+
+  const handleStartCodingSuccess = useCallback(() => {
+    setLogs((l) => [...l, mkLog("Coding agent started.", "info")]);
+  }, []);
+
+  const handleRejectSprint = useCallback(
+    (data: { issueKey: string; feedback: string }) => {
+      setLogs((l) => [
+        ...l,
+        mkLog(
+          `Ticket ${data.issueKey} rejected. Agent will retry with feedback.`,
+          "info"
+        )
+      ]);
+      rejectSprintReview(data, {
+        onError: (err) => {
+          setMessages((m) => [
+            ...m,
+            {
+              id: crypto.randomUUID(),
+              role: "agent",
+              content: `Error: ${err.message}`
+            }
+          ]);
+        }
+      });
+    },
+    [rejectSprintReview]
+  );
 
   const handleLinkJira = useCallback((key: string) => {
     setMessages((m) => [
@@ -606,12 +950,29 @@ function ProjectPage({ id }: { id: string }) {
           <h1 className="text-sm font-semibold truncate">{project.name}</h1>
           <Badge variant={statusVariant}>{statusLabel}</Badge>
         </div>
-        <Link to="/dashboard/projects/$id/jira" params={{ id }}>
-          <Button variant="outline" size="sm">
-            <ExternalLink className="size-3.5" />
-            Jira Board
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          {project.status === "FAILED" && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isResetting}
+              onClick={() => resetProject()}
+            >
+              {isResetting ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <RotateCcw className="size-3.5" />
+              )}
+              Reset
+            </Button>
+          )}
+          <Link to="/dashboard/projects/$id/jira" params={{ id }}>
+            <Button variant="outline" size="sm">
+              <ExternalLink className="size-3.5" />
+              Jira Board
+            </Button>
+          </Link>
+        </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
@@ -621,6 +982,9 @@ function ProjectPage({ id }: { id: string }) {
             messages={messages}
             onSendMessage={handleSendMessage}
             onApprove={handleApprove}
+            onStartCodingSuccess={handleStartCodingSuccess}
+            onApproveSprint={handleApproveSprint}
+            onRejectSprint={handleRejectSprint}
             onLinkJira={handleLinkJira}
           />
         </div>

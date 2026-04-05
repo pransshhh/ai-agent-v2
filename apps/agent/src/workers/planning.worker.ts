@@ -19,6 +19,8 @@ export function startPlanningWorker() {
           runId,
           userId: job.data.userId,
           projectId,
+          jiraProjectKey: job.data.jiraProjectKey,
+          jiraBoardId: job.data.jiraBoardId,
           prompt: job.data.prompt,
           aiProvider: job.data.aiProvider,
           aiApiKey: job.data.aiApiKey
@@ -33,12 +35,11 @@ export function startPlanningWorker() {
           throw new Error(result.error ?? "Planning graph failed");
         }
 
-        // Update project — status PLANNED + save sprintId
+        // Update project — status PLANNED, tickets are in backlog
         await db.project.update({
           where: { id: projectId },
           data: {
             status: "PLANNED",
-            jiraSprintId: result.sprintId,
             currentRunId: null
           }
         });
@@ -48,10 +49,9 @@ export function startPlanningWorker() {
             jobId: job.id,
             runId,
             epicKeys: result.epicKeys,
-            ticketKeys: result.ticketKeys,
-            sprintId: result.sprintId
+            ticketKeys: result.ticketKeys
           },
-          "Planning job completed"
+          "Planning job completed — tickets in backlog"
         );
 
         return result;

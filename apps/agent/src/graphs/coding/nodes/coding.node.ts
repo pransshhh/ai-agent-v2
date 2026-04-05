@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { createModel, stepCountIs, ToolLoopAgent } from "@repo/ai";
-import { jira } from "../../../lib/jira";
+import { createJira } from "../../../lib/jira";
 import { logger } from "../../../lib/logger";
 import { createListFilesTool } from "../../../tools/list-files";
 import { createReadFileTool } from "../../../tools/read-file";
@@ -12,11 +12,13 @@ import type { CodingStateType } from "../state";
 export async function codingNode(
   state: CodingStateType
 ): Promise<Partial<CodingStateType>> {
+  const jira = createJira(state.jiraProjectKey, state.jiraBoardId);
   const sprintIssues = await jira.issues.getSprintIssues(state.sprintId);
 
   const pending = sprintIssues.filter(
     (issue) =>
       issue.status !== "Done" &&
+      issue.status !== "In Review" &&
       !state.completedTickets.includes(issue.key) &&
       !state.failedTickets.includes(issue.key)
   );
@@ -37,8 +39,7 @@ export async function codingNode(
   const BASE_TMP_DIR = path.resolve(process.cwd(), "tmp");
 
   const workDir =
-    state.workDir ??
-    path.join(BASE_TMP_DIR, "ai-agent", state.projectId, state.runId);
+    state.workDir ?? path.join(BASE_TMP_DIR, "ai-agent", state.projectId);
 
   await mkdir(workDir, { recursive: true });
 
@@ -80,6 +81,25 @@ Keep working until the task is fully implemented.
 Working directory contains project files.`;
 
   try {
+    // Build rejection context if this ticket is the rejected one or comes after it
+    let rejectionContext = "";
+    if (state.rejectedTicketKey && state.rejectedTicketFeedback) {
+      if (ticket.key === state.rejectedTicketKey) {
+        rejectionContext = `
+⚠️  HUMAN REVIEW REJECTION FEEDBACK:
+This ticket was previously rejected by a human reviewer. You MUST address the following feedback:
+"${state.rejectedTicketFeedback}"
+
+Do not repeat the same implementation. Carefully read the feedback and fix the issue.`;
+      } else {
+        rejectionContext = `
+⚠️  DEPENDENCY CONTEXT:
+Ticket ${state.rejectedTicketKey} was rejected by a human reviewer and re-implemented. This ticket may depend on it.
+You MUST re-examine and re-implement this ticket from scratch to ensure it is consistent with the corrected version of ${state.rejectedTicketKey}.
+Do not assume the previous implementation was correct.`;
+      }
+    }
+
     const agent = new ToolLoopAgent({
       model,
       tools,
@@ -93,7 +113,7 @@ Working directory contains project files.`;
 Ticket: ${ticket.key}
 Summary: ${ticket.summary}
 Description: ${ticket.description ?? "No description provided"}
-
+${rejectionContext}
 Start by exploring the project, then implement the feature.`,
       onStepFinish: ({ stepNumber, toolCalls }) => {
         logger.info(
@@ -108,10 +128,10 @@ Start by exploring the project, then implement the feature.`,
       }
     });
 
-    await jira.issues.transitionIssue(ticket.key, "Done");
+    await jira.issues.transitionIssue(ticket.key, "In Review");
 
     await jira.issues.addComment(ticket.key, {
-      body: `✅ Agent completed implementation. Run ID: ${state.runId}`
+      body: `✅ Agent completed implementation — awaiting human review. Run ID: ${state.runId}`
     });
 
     logger.info(

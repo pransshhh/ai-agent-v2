@@ -1,4 +1,8 @@
-import { ZStartPlanningRequest } from "@repo/zod";
+import {
+  ZRejectSprintRequest,
+  ZStartCodingRequest,
+  ZStartPlanningRequest
+} from "@repo/zod/agent";
 import {
   ZCreateProjectRequest,
   ZLinkJiraRequest,
@@ -63,4 +67,28 @@ projectRouter.post(
   "/:id/agent/planning/approve",
   validate({ params: ZProjectIdParam }),
   agentController.approvePlanning
+);
+
+projectRouter.post(
+  "/:id/agent/coding/start",
+  validate({ params: ZProjectIdParam, body: ZStartCodingRequest }),
+  agentController.startCoding
+);
+
+projectRouter.post(
+  "/:id/agent/sprint/approve",
+  validate({ params: ZProjectIdParam }),
+  agentController.approveSprintReview
+);
+
+projectRouter.post(
+  "/:id/agent/sprint/reject",
+  validate({ params: ZProjectIdParam, body: ZRejectSprintRequest }),
+  agentController.rejectSprintReview
+);
+
+projectRouter.post(
+  "/:id/agent/reset",
+  validate({ params: ZProjectIdParam }),
+  agentController.reset
 );

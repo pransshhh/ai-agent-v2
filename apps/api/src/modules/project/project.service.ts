@@ -4,7 +4,7 @@ import type {
   LinkJiraRequest,
   UpdateProjectRequest
 } from "@repo/zod/project";
-import { jira } from "../../lib/jira";
+import { createDiscoveryJira } from "../../lib/jira";
 import { AppError } from "../../middleware/error";
 
 export const projectService = {
@@ -62,17 +62,17 @@ export const projectService = {
   async linkJira(id: string, userId: string, input: LinkJiraRequest) {
     await projectService.getProject(id, userId);
 
-    // Verify the Jira project key exists and fetch the boardId
-    const boards = await jira.boards.listBoards();
-    const board = boards.find((b) =>
-      // Board names typically contain the project key
-      b.name.toUpperCase().includes(input.projectKey.toUpperCase())
+    // Fetch boards that belong to this Jira project key
+    const boards = await createDiscoveryJira().boards.listBoardsForProject(
+      input.projectKey
     );
+    // Prefer a scrum board; fall back to the first board found
+    const board = boards.find((b) => b.type === "scrum") ?? boards[0];
 
     if (!board) {
       throw new AppError(
-        `No Jira board found for project key "${input.projectKey}". ` +
-          "Make sure the project key is correct and the board exists.",
+        `No board found for Jira project "${input.projectKey}". ` +
+          "Make sure the project key is correct and a scrum board exists.",
         404,
         "JIRA_BOARD_NOT_FOUND"
       );

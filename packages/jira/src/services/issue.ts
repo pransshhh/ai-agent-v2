@@ -4,6 +4,15 @@ import type {
   Version3Client,
   Version3Models
 } from "jira.js";
+
+function toAdf(text: string) {
+  return {
+    type: "doc",
+    version: 1,
+    content: [{ type: "paragraph", content: [{ type: "text", text }] }]
+  };
+}
+
 import type {
   AddCommentInput,
   CreateIssueInput,
@@ -26,7 +35,9 @@ export function createIssueService(
           project: { key: config.projectKey },
           summary: input.summary,
           issuetype: { name: input.type },
-          ...(input.description ? { description: input.description } : {}),
+          ...(input.description
+            ? { description: toAdf(input.description) }
+            : {}),
           ...(input.priority ? { priority: { name: input.priority } } : {}),
           ...(input.assigneeAccountId
             ? { assignee: { accountId: input.assigneeAccountId } }
@@ -67,7 +78,9 @@ export function createIssueService(
         issueIdOrKey: issueKey,
         fields: {
           ...(input.summary ? { summary: input.summary } : {}),
-          ...(input.description ? { description: input.description } : {}),
+          ...(input.description
+            ? { description: toAdf(input.description) }
+            : {}),
           ...(input.priority ? { priority: { name: input.priority } } : {}),
           ...(input.assigneeAccountId
             ? { assignee: { accountId: input.assigneeAccountId } }
@@ -78,9 +91,18 @@ export function createIssueService(
       return this.getIssue(issueKey);
     },
 
+    async getBacklogIssues(jql?: string): Promise<JiraIssue[]> {
+      const res =
+        await agile.board.getIssuesForBacklog<AgileModels.SearchResults>({
+          boardId: config.boardId,
+          ...(jql ? { jql } : {})
+        });
+      return (res.issues ?? []).map(mapAgileIssue);
+    },
+
     async transitionIssue(
       issueKey: string,
-      targetStatus: "In Progress" | "In Review" | "Done"
+      targetStatus: "To Do" | "In Progress" | "In Review" | "Done"
     ): Promise<void> {
       const transitions = await v3.issues.getTransitions({
         issueIdOrKey: issueKey

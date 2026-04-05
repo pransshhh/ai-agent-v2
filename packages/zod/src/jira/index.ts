@@ -63,7 +63,12 @@ export const ZSprintIdParam = z.object({
   sprintId: z.coerce.number({ message: "sprintId must be a number" })
 });
 
+export const ZJiraProjectQuery = z.object({
+  projectId: z.string().min(1, "projectId is required")
+});
+
 export const ZListSprintsQuery = z.object({
+  projectId: z.string().min(1, "projectId is required"),
   state: ZSprintState.optional()
 });
 
@@ -176,3 +181,4 @@ export type CreateEpicRequest = z.infer<typeof ZCreateEpicRequest>;
 export type MoveIssuesToSprintRequest = z.infer<
   typeof ZMoveIssuesToSprintRequest
 >;
+export type JiraProjectQuery = z.infer<typeof ZJiraProjectQuery>;

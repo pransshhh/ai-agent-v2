@@ -3,8 +3,13 @@ export { createRedisConnection } from "./connection";
 export type {
   CodingJobPayload,
   JobPayload,
-  PlanningJobPayload
+  PlanningJobPayload,
+  SprintPlanningJobPayload
 } from "./jobs";
 export type { QueueName } from "./names";
 export { QUEUE_NAMES } from "./names";
-export { createCodingQueue, createPlanningQueue } from "./queues";
+export {
+  createCodingQueue,
+  createPlanningQueue,
+  createSprintPlanningQueue
+} from "./queues";

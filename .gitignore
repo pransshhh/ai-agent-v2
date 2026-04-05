@@ -37,7 +37,7 @@ coverage
 out/
 build
 dist
-tmp
+tmp/
 temp
 
 # Prisma

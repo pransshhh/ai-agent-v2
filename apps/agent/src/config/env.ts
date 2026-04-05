@@ -16,9 +16,7 @@ const envSchema = z.object({
   AWS_S3_BUCKET: z.string().min(1),
   JIRA_BASE_URL: z.url(),
   JIRA_EMAIL: z.email(),
-  JIRA_API_TOKEN: z.string().min(1),
-  JIRA_PROJECT_KEY: z.string().min(1),
-  JIRA_BOARD_ID: z.coerce.number()
+  JIRA_API_TOKEN: z.string().min(1)
 });
 
 const { success, data, error } = envSchema.safeParse(process.env);
