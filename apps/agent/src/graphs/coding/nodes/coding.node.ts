@@ -139,7 +139,6 @@ Start by exploring the project, then implement the feature.`,
       "Ticket completed"
     );
 
-    await new Promise((resolve) => setTimeout(resolve, 4000));
     return {
       currentTicketKey: ticket.key,
       currentTicketSummary: ticket.summary,
@@ -158,7 +157,6 @@ Start by exploring the project, then implement the feature.`,
       body: `❌ Agent failed: ${message}. Run ID: ${state.runId}`
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 4000));
     return {
       failedTickets: [ticket.key],
       workDir,

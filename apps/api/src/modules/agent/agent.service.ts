@@ -6,11 +6,7 @@ import type {
 } from "@repo/zod/agent";
 import { env } from "../../config/env";
 import { createJira } from "../../lib/jira";
-import {
-  codingQueue,
-  planningQueue,
-  sprintPlanningQueue
-} from "../../lib/queue";
+import { codingQueue, planningQueue } from "../../lib/queue";
 import { AppError } from "../../middleware/error";
 
 export const agentService = {
@@ -119,6 +115,11 @@ export const agentService = {
       );
     }
 
+    // put sprint in active state from future before coding the tickets in it
+    await jira.sprints.updateSprint(sprint.id, {
+      state: "active"
+    });
+
     const codingRunId = crypto.randomUUID();
 
     await db.project.update({
@@ -146,9 +147,8 @@ export const agentService = {
   },
 
   /**
-   * Approve sprint review: close current sprint, queue sprint-planning which
-   * picks the next logical batch from backlog and starts a new coding run.
-   * If backlog is empty the sprint-planning worker sets the project to IDLE.
+   * Approve sprint review: close current sprint, then return to PLANNED so the
+   * user can pick the next sprint manually. If the backlog is empty, go IDLE.
    */
   async approveSprintReview(projectId: string, userId: string) {
     const project = await db.project.findUnique({ where: { id: projectId } });
@@ -174,25 +174,32 @@ export const agentService = {
       );
     }
 
-    const sprintPlanRunId = crypto.randomUUID();
+    const jira = createJira(project.jiraProjectKey, project.jiraBoardId);
+
+    // Transition any "In Review" tickets to "Done" before closing the sprint
+    const sprintIssues = await jira.issues.getSprintIssues(
+      project.jiraSprintId
+    );
+    await Promise.all(
+      sprintIssues
+        .filter((i) => i.status === "In Review")
+        .map((i) => jira.issues.transitionIssue(i.key, "Done"))
+    );
+
+    await jira.sprints.updateSprint(project.jiraSprintId, { state: "closed" });
+
+    // Check if there are remaining backlog tickets for this project
+    const backlog = await jira.issues.getBacklogIssues(
+      `labels = "ai-agent-${projectId}"`
+    );
+    const nextStatus = backlog.length > 0 ? "PLANNED" : "IDLE";
 
     await db.project.update({
       where: { id: projectId },
-      data: { status: "CODING", currentRunId: sprintPlanRunId }
+      data: { status: nextStatus, currentRunId: null, jiraSprintId: null }
     });
 
-    const job = await sprintPlanningQueue.add("sprint-planning", {
-      runId: sprintPlanRunId,
-      userId,
-      projectId,
-      jiraProjectKey: project.jiraProjectKey,
-      jiraBoardId: project.jiraBoardId,
-      previousSprintId: project.jiraSprintId,
-      aiProvider: "gemini",
-      aiApiKey: env.GOOGLE_GENERATIVE_AI_API_KEY
-    });
-
-    return { jobId: job.id ?? "", runId: sprintPlanRunId };
+    return { status: nextStatus };
   },
 
   /**
