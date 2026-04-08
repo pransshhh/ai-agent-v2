@@ -4,6 +4,7 @@ import {
   ZStartPlanningRequest
 } from "@repo/zod/agent";
 import {
+  ZConnectGithubRequest,
   ZCreateProjectRequest,
   ZLinkJiraRequest,
   ZProjectIdParam,
@@ -55,6 +56,18 @@ projectRouter.delete(
   "/:id/jira/unlink",
   validate({ params: ZProjectIdParam }),
   projectController.unlinkJira
+);
+
+projectRouter.post(
+  "/:id/github/connect",
+  validate({ params: ZProjectIdParam, body: ZConnectGithubRequest }),
+  projectController.connectGithub
+);
+
+projectRouter.delete(
+  "/:id/github/disconnect",
+  validate({ params: ZProjectIdParam }),
+  projectController.disconnectGithub
 );
 
 projectRouter.post(

@@ -7,7 +7,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "clean": "rimraf node_modules"
+    "clean": "rimraf node_modules .turbo"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.64",

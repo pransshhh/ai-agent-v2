@@ -7,7 +7,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "clean": "rimraf node_modules"
+    "clean": "rimraf node_modules .turbo"
   },
   "dependencies": {
     "jira.js": "^5.3.1"

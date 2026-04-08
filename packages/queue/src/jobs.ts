@@ -31,6 +31,10 @@ export interface CodingJobPayload {
   s3Prefix: string;
   aiProvider: "anthropic" | "gemini" | "openai";
   aiApiKey: string;
+  /** Decrypted GitHub PAT — only set when GitHub is connected. */
+  githubPat?: string;
+  githubRepoUrl?: string;
+  githubBaseBranch?: string;
   /** Ticket key that was HIL-rejected. Coding agent receives feedback for this ticket. */
   rejectedTicketKey?: string;
   /** Feedback from the human reviewer for the rejected ticket. */

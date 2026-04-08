@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "typecheck": "tsc --noEmit",
-    "clean": "rimraf node_modules dist",
+    "clean": "rimraf node_modules dist .turbo",
     "preview": "vite preview"
   },
   "dependencies": {

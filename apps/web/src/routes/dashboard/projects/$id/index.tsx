@@ -875,7 +875,7 @@ function ProjectPage({ id }: { id: string }) {
   const handleApproveSprint = useCallback(() => {
     setLogs((l) => [
       ...l,
-      mkLog("Sprint approved. Planning next sprint...", "info")
+      mkLog("Sprint approved. Plan your next sprint...", "info")
     ]);
     approveSprintReview(undefined, {
       onError: (err) => {

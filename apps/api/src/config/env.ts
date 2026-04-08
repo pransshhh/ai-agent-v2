@@ -17,7 +17,10 @@ const envSchema = z.object({
   GOOGLE_GENERATIVE_AI_API_KEY: z.string(),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
-  REDIS_URL: z.url()
+  REDIS_URL: z.url(),
+  GITHUB_PAT_SECRET: z
+    .string()
+    .min(16, "GITHUB_PAT_SECRET must be at least 16 characters")
 });
 
 const { success, data, error } = envSchema.safeParse(process.env);

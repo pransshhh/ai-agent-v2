@@ -5,6 +5,7 @@ import type {
   StartPlanningRequest
 } from "@repo/zod/agent";
 import { env } from "../../config/env";
+import { decrypt } from "../../lib/crypto";
 import { createJira } from "../../lib/jira";
 import { codingQueue, planningQueue } from "../../lib/queue";
 import { AppError } from "../../middleware/error";
@@ -49,10 +50,6 @@ export const agentService = {
     return { jobId: job.id ?? "", runId };
   },
 
-  /**
-   * Approve planning: user has reviewed the backlog. Status stays PLANNED.
-   * Clears any stale jiraSprintId. User will then pick a sprint and call startCoding.
-   */
   async approvePlanning(projectId: string, userId: string) {
     const project = await db.project.findUnique({ where: { id: projectId } });
     if (!project)
@@ -75,10 +72,6 @@ export const agentService = {
     return { status: "approved" as const };
   },
 
-  /**
-   * Start coding: user picks an existing future sprint, we save it to the project
-   * and enqueue the coding job immediately.
-   */
   async startCoding(
     projectId: string,
     userId: string,
@@ -103,6 +96,13 @@ export const agentService = {
         "JIRA_NOT_LINKED"
       );
     }
+    if (!project.githubRepoUrl || !project.githubPat) {
+      throw new AppError(
+        "GitHub not connected to this project",
+        400,
+        "GITHUB_NOT_CONNECTED"
+      );
+    }
 
     const jira = createJira(project.jiraProjectKey, project.jiraBoardId);
     const futureSprints = await jira.sprints.listSprints("future");
@@ -121,6 +121,7 @@ export const agentService = {
     });
 
     const codingRunId = crypto.randomUUID();
+    const decryptedPat = decrypt(project.githubPat, env.GITHUB_PAT_SECRET);
 
     await db.project.update({
       where: { id: projectId },
@@ -140,16 +141,15 @@ export const agentService = {
       sprintId: input.sprintId,
       s3Prefix: `projects/${projectId}/`,
       aiProvider: "gemini",
-      aiApiKey: env.GOOGLE_GENERATIVE_AI_API_KEY
+      aiApiKey: env.GOOGLE_GENERATIVE_AI_API_KEY,
+      githubPat: decryptedPat,
+      githubRepoUrl: project.githubRepoUrl,
+      githubBaseBranch: project.githubBaseBranch ?? "main"
     });
 
     return { jobId: job.id ?? "", runId: codingRunId };
   },
 
-  /**
-   * Approve sprint review: close current sprint, then return to PLANNED so the
-   * user can pick the next sprint manually. If the backlog is empty, go IDLE.
-   */
   async approveSprintReview(projectId: string, userId: string) {
     const project = await db.project.findUnique({ where: { id: projectId } });
     if (!project)
@@ -202,13 +202,6 @@ export const agentService = {
     return { status: nextStatus };
   },
 
-  /**
-   * Reject sprint review at ticket K:
-   *   - Finds K's position in the sprint issue list
-   *   - Resets K and all tickets after K to "To Do"
-   *   - Adds feedback comment to K; adds dependency warning to tickets after K
-   *   - Queues a new coding job for the same sprint with rejection context
-   */
   async reset(projectId: string, userId: string) {
     const project = await db.project.findUnique({ where: { id: projectId } });
     if (!project)
@@ -318,6 +311,9 @@ export const agentService = {
     );
 
     const codingRunId = crypto.randomUUID();
+    const decryptedPat = project.githubPat
+      ? decrypt(project.githubPat, env.GITHUB_PAT_SECRET)
+      : undefined;
 
     await db.project.update({
       where: { id: projectId },
@@ -334,6 +330,9 @@ export const agentService = {
       s3Prefix: `projects/${projectId}/`,
       aiProvider: "gemini",
       aiApiKey: env.GOOGLE_GENERATIVE_AI_API_KEY,
+      githubPat: decryptedPat,
+      githubRepoUrl: project.githubRepoUrl ?? undefined,
+      githubBaseBranch: project.githubBaseBranch ?? "main",
       rejectedTicketKey: input.issueKey,
       rejectedTicketFeedback: input.feedback
     });

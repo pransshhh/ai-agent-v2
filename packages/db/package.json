@@ -12,7 +12,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset",
     "db:studio": "prisma studio",
-    "clean": "rimraf node_modules src/generated",
+    "clean": "rimraf node_modules src/generated .turbo",
     "postinstall": "prisma generate"
   },
   "dependencies": {

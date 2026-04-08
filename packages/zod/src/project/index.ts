@@ -25,9 +25,22 @@ export const ZProject = z.object({
   jiraSprintId: z.number().nullable().openapi({ example: 68 }),
   status: ZProjectStatus,
   currentRunId: z.string().nullable(),
+  githubRepoUrl: z
+    .string()
+    .nullable()
+    .openapi({ example: "https://github.com/org/repo" }),
+  githubPat: z.string().nullable(),
+  githubBaseBranch: z.string().nullable().openapi({ example: "main" }),
+  githubPrUrl: z
+    .string()
+    .nullable()
+    .openapi({ example: "https://github.com/org/repo/pull/1" }),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime()
 });
+
+// Safe to return to frontend — omits the encrypted PAT
+export const ZProjectPublic = ZProject.omit({ githubPat: true });
 
 export const ZCreateProjectRequest = z.object({
   name: z
@@ -59,8 +72,19 @@ export const ZLinkJiraRequest = z.object({
     .openapi({ example: "SCRUM" })
 });
 
+export const ZConnectGithubRequest = z.object({
+  repoUrl: z.string().url().openapi({ example: "https://github.com/org/repo" }),
+  pat: z
+    .string()
+    .min(1, "Personal access token is required")
+    .openapi({ example: "github_pat_..." }),
+  baseBranch: z.string().default("main").openapi({ example: "main" })
+});
+
 export type Project = z.infer<typeof ZProject>;
+export type ProjectPublic = z.infer<typeof ZProjectPublic>;
 export type ProjectStatus = z.infer<typeof ZProjectStatus>;
 export type CreateProjectRequest = z.infer<typeof ZCreateProjectRequest>;
 export type UpdateProjectRequest = z.infer<typeof ZUpdateProjectRequest>;
 export type LinkJiraRequest = z.infer<typeof ZLinkJiraRequest>;
+export type ConnectGithubRequest = z.infer<typeof ZConnectGithubRequest>;

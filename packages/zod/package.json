@@ -12,7 +12,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "clean": "rimraf node_modules"
+    "clean": "rimraf node_modules .turbo"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.5.0",

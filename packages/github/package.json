@@ -1,5 +1,5 @@
 {
-  "name": "@repo/queue",
+  "name": "@repo/github",
   "version": "0.0.1",
   "private": true,
   "exports": {
@@ -10,7 +10,7 @@
     "clean": "rimraf node_modules .turbo"
   },
   "dependencies": {
-    "bullmq": "^5.71.0"
+    "@octokit/rest": "^21.1.1"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",

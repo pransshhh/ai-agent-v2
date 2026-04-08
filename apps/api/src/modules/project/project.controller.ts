@@ -11,7 +11,10 @@ export const projectController = {
 
   async getProject(req: Request, res: Response) {
     const { id } = req.params as ProjectParams;
-    const project = await projectService.getProject(id, res.locals.user.id);
+    const project = await projectService.getProjectPublic(
+      id,
+      res.locals.user.id
+    );
     res.json(project);
   },
 
@@ -52,6 +55,25 @@ export const projectController = {
   async unlinkJira(req: Request, res: Response) {
     const { id } = req.params as ProjectParams;
     const project = await projectService.unlinkJira(id, res.locals.user.id);
+    res.json(project);
+  },
+
+  async connectGithub(req: Request, res: Response) {
+    const { id } = req.params as ProjectParams;
+    const project = await projectService.connectGithub(
+      id,
+      res.locals.user.id,
+      req.body
+    );
+    res.json(project);
+  },
+
+  async disconnectGithub(req: Request, res: Response) {
+    const { id } = req.params as ProjectParams;
+    const project = await projectService.disconnectGithub(
+      id,
+      res.locals.user.id
+    );
     res.json(project);
   }
 };
