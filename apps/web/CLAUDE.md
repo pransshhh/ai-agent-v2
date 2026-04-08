@@ -20,7 +20,7 @@ apps/web/src/
     utils.ts            # shadcn cn() util
   hooks/
     use-auth.ts         # TanStack Query mutations for signup, signin, verify, signout
-    use-projects.ts     # useProjects, useProject, useCreateProject, useUpdateProject
+    use-projects.ts     # useProjects, useProject, useCreateProject, useUpdateProject, useConnectGithub, useDisconnectGithub, useStartCoding, useApprovePlanning, useApproveSprintReview, useRejectSprintReview, useResetProject
   routes/
     __root.tsx          # Root layout
     index.tsx           # Landing page — hero, feature cards, CTA buttons (auth-aware nav)
@@ -38,7 +38,7 @@ apps/web/src/
       index.tsx         # Project list, "New Project" dialog, status badges, empty state
       projects/
         $id/
-          index.tsx     # Two-panel layout: left = chat, right = logs + status timeline
+          index.tsx     # Two-panel layout: left = chat, right = logs + status timeline; header has GitHub connect/disconnect + View PR button
           jira.tsx        # Jira board page — two tabs: Backlog and Board (dummy for now)
           route.tsx       # Protected route guard — redirects to /dashboard if not signed in
   components/
@@ -137,7 +137,6 @@ Path params via `useParams()`. Navigation via `Link` or `useNavigate()`.
 - Real-time WebSocket logs (deferred — polling in place, designed for easy swap)
 - Monaco editor / file viewer (deferred)
 - S3 file browser (deferred)
-- GitHub integration UI (deferred)
 - Org/team management (deferred)
 - Drag-and-drop on Jira board (deferred)
 - Ticket editing (deferred)

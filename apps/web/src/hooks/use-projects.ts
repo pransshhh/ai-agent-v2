@@ -109,6 +109,28 @@ export function useResetProject(projectId: string) {
   });
 }
 
+export function useConnectGithub(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { repoUrl: string; pat: string; baseBranch?: string }) =>
+      api
+        .post(`/api/v1/projects/${projectId}/github/connect`, data)
+        .then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects", projectId] })
+  });
+}
+
+export function useDisconnectGithub(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api
+        .delete(`/api/v1/projects/${projectId}/github/disconnect`)
+        .then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects", projectId] })
+  });
+}
+
 export function useRejectSprintReview(projectId: string) {
   const qc = useQueryClient();
   return useMutation<

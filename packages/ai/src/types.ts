@@ -12,6 +12,6 @@ export type { LanguageModel };
 
 export const DEFAULT_MODELS: Record<AIProviderName, string> = {
   anthropic: "claude-sonnet-4-5",
-  gemini: "gemini-2.0-flash",
+  gemini: "gemini-2.5-flash",
   openai: "gpt-4o"
 };

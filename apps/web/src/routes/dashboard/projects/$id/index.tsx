@@ -1,11 +1,12 @@
 import type { Project, ProjectStatus } from "@repo/zod/project";
-import { ZLinkJiraRequest } from "@repo/zod/project";
+import { ZConnectGithubRequest, ZLinkJiraRequest } from "@repo/zod/project";
 import { useForm } from "@tanstack/react-form";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   BotIcon,
   Check,
   ExternalLink,
+  GitBranch,
   Loader2,
   RotateCcw,
   Send,
@@ -36,6 +37,8 @@ import { useFutureSprints } from "@/hooks/use-jira";
 import {
   useApprovePlanning,
   useApproveSprintReview,
+  useConnectGithub,
+  useDisconnectGithub,
   useLinkJira,
   useProject,
   useRejectSprintReview,
@@ -414,6 +417,163 @@ function StartCodingDialog({
               <Loader2 className="size-4 animate-spin" />
             ) : (
               "Start Coding"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </DialogRoot>
+  );
+}
+
+/** Parse "https://github.com/owner/repo" → "owner/repo" */
+function parseRepoName(url: string): string {
+  const match = url.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:\/.*)?$/);
+  return match?.[1] ?? url;
+}
+
+function GithubConnectButton({ project }: { project: Project }) {
+  const [open, setOpen] = useState(false);
+  const [repoUrl, setRepoUrl] = useState("");
+  const [pat, setPat] = useState("");
+  const [baseBranch, setBaseBranch] = useState("main");
+  const [errors, setErrors] = useState<{
+    repoUrl?: string;
+    pat?: string;
+    baseBranch?: string;
+  }>({});
+
+  const { mutate: connect, isPending: isConnecting } = useConnectGithub(
+    project.id
+  );
+  const { mutate: disconnect, isPending: isDisconnecting } =
+    useDisconnectGithub(project.id);
+
+  const handleConnect = () => {
+    const result = ZConnectGithubRequest.safeParse({
+      repoUrl,
+      pat,
+      baseBranch
+    });
+    if (!result.success) {
+      const fieldErrors: typeof errors = {};
+      for (const issue of result.error.issues) {
+        const field = issue.path[0] as keyof typeof errors;
+        if (field) fieldErrors[field] = issue.message;
+      }
+      setErrors(fieldErrors);
+      return;
+    }
+    connect(result.data, {
+      onSuccess: () => {
+        setOpen(false);
+        setRepoUrl("");
+        setPat("");
+        setBaseBranch("main");
+        setErrors({});
+      }
+    });
+  };
+
+  if (project.githubRepoUrl) {
+    return (
+      <div className="flex items-center gap-2">
+        <a
+          href={project.githubRepoUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <GitBranch className="size-3.5" />
+          {parseRepoName(project.githubRepoUrl)}
+          <ExternalLink className="size-3" />
+        </a>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-xs h-7 px-2 text-muted-foreground"
+          disabled={isDisconnecting}
+          onClick={() => disconnect()}
+        >
+          {isDisconnecting ? (
+            <Loader2 className="size-3 animate-spin" />
+          ) : (
+            "Disconnect"
+          )}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <DialogRoot open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          <Button variant="outline" size="sm">
+            <GitBranch className="size-3.5" />
+            Connect GitHub
+          </Button>
+        }
+      />
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Connect GitHub Repository</DialogTitle>
+          <DialogDescription>
+            Connect a GitHub repo so the coding agent can read and write files
+            directly via the GitHub API.
+          </DialogDescription>
+        </DialogHeader>
+        <FieldGroup>
+          <Field data-invalid={!!errors.repoUrl}>
+            <FieldLabel htmlFor="github-repo-url">Repository URL</FieldLabel>
+            <Input
+              id="github-repo-url"
+              placeholder="https://github.com/org/repo"
+              value={repoUrl}
+              onChange={(e) => {
+                setRepoUrl(e.target.value);
+                setErrors((p) => ({ ...p, repoUrl: undefined }));
+              }}
+            />
+            {errors.repoUrl && (
+              <FieldError errors={[{ message: errors.repoUrl }]} />
+            )}
+          </Field>
+          <Field data-invalid={!!errors.pat}>
+            <FieldLabel htmlFor="github-pat">Personal Access Token</FieldLabel>
+            <Input
+              id="github-pat"
+              type="password"
+              placeholder="github_pat_..."
+              value={pat}
+              onChange={(e) => {
+                setPat(e.target.value);
+                setErrors((p) => ({ ...p, pat: undefined }));
+              }}
+            />
+            {errors.pat && <FieldError errors={[{ message: errors.pat }]} />}
+          </Field>
+          <Field data-invalid={!!errors.baseBranch}>
+            <FieldLabel htmlFor="github-base-branch">Base Branch</FieldLabel>
+            <Input
+              id="github-base-branch"
+              placeholder="main"
+              value={baseBranch}
+              onChange={(e) => {
+                setBaseBranch(e.target.value);
+                setErrors((p) => ({ ...p, baseBranch: undefined }));
+              }}
+            />
+            {errors.baseBranch && (
+              <FieldError errors={[{ message: errors.baseBranch }]} />
+            )}
+          </Field>
+        </FieldGroup>
+        <DialogFooter>
+          <Button onClick={handleConnect} disabled={isConnecting}>
+            {isConnecting ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              "Connect"
             )}
           </Button>
         </DialogFooter>
@@ -951,6 +1111,15 @@ function ProjectPage({ id }: { id: string }) {
           <Badge variant={statusVariant}>{statusLabel}</Badge>
         </div>
         <div className="flex items-center gap-2">
+          <GithubConnectButton project={project} />
+          {project.githubPrUrl && (
+            <a href={project.githubPrUrl} target="_blank" rel="noreferrer">
+              <Button variant="outline" size="sm">
+                <ExternalLink className="size-3.5" />
+                View PR
+              </Button>
+            </a>
+          )}
           {project.status === "FAILED" && (
             <Button
               variant="outline"
