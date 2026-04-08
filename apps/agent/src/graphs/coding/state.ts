@@ -16,6 +16,37 @@ export const CodingState = Annotation.Root({
   aiProvider: Annotation<"anthropic" | "gemini" | "openai">,
   aiApiKey: Annotation<string>,
 
+  // GitHub fields — set by worker before invoking the graph
+  githubOwner: Annotation<string | null>({
+    default: () => null,
+    reducer: (_, b) => b
+  }),
+  githubRepo: Annotation<string | null>({
+    default: () => null,
+    reducer: (_, b) => b
+  }),
+  githubPat: Annotation<string | null>({
+    default: () => null,
+    reducer: (_, b) => b
+  }),
+  githubRepoUrl: Annotation<string | null>({
+    default: () => null,
+    reducer: (_, b) => b
+  }),
+  githubBaseBranch: Annotation<string | null>({
+    default: () => null,
+    reducer: (_, b) => b
+  }),
+  featureBranch: Annotation<string | null>({
+    default: () => null,
+    reducer: (_, b) => b
+  }),
+  // CONTEXT.md content — injected into coding node system prompt
+  repoContext: Annotation<string | null>({
+    default: () => null,
+    reducer: (_, b) => b
+  }),
+
   // Current ticket being worked on
   currentTicketKey: Annotation<string | null>({
     default: () => null,

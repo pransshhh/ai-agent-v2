@@ -7,6 +7,7 @@ export type {
 } from "ai";
 export {
   generateObject,
+  generateText,
   stepCountIs,
   streamText,
   ToolLoopAgent,

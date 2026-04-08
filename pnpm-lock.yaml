@@ -38,6 +38,9 @@ importers:
       '@repo/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@repo/github':
+        specifier: workspace:*
+        version: link:../../packages/github
       '@repo/jira':
         specifier: workspace:*
         version: link:../../packages/jira

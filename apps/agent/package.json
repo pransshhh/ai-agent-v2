@@ -13,6 +13,7 @@
     "@langchain/langgraph": "^1.2.6",
     "@repo/ai": "workspace:*",
     "@repo/db": "workspace:*",
+    "@repo/github": "workspace:*",
     "@repo/jira": "workspace:*",
     "@repo/queue": "workspace:*",
     "@repo/zod": "workspace:*",

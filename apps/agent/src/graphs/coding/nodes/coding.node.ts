@@ -1,12 +1,12 @@
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
+import type { ToolSet } from "@repo/ai";
 import { createModel, stepCountIs, ToolLoopAgent } from "@repo/ai";
+import { createGithubServices } from "@repo/github";
 import { createJira } from "../../../lib/jira";
 import { logger } from "../../../lib/logger";
-import { createListFilesTool } from "../../../tools/list-files";
-import { createReadFileTool } from "../../../tools/read-file";
+import { createGithubListFilesTool } from "../../../tools/github-list-files";
+import { createGithubReadFileTool } from "../../../tools/github-read-file";
+import { createGithubWriteFileTool } from "../../../tools/github-write-file";
 import { createRunCommandTool } from "../../../tools/run-command";
-import { createWriteFileTool } from "../../../tools/write-file";
 import type { CodingStateType } from "../state";
 
 export async function codingNode(
@@ -36,25 +36,43 @@ export async function codingNode(
     "Coding node started"
   );
 
-  const BASE_TMP_DIR = path.resolve(process.cwd(), "tmp");
-
-  const workDir =
-    state.workDir ?? path.join(BASE_TMP_DIR, "ai-agent", state.projectId);
-
-  await mkdir(workDir, { recursive: true });
-
   await jira.issues.transitionIssue(ticket.key, "In Progress");
 
   await jira.issues.addComment(ticket.key, {
     body: `Agent started working on this ticket. Run ID: ${state.runId}`
   });
 
-  const tools = {
-    readFile: createReadFileTool(workDir),
-    writeFile: createWriteFileTool(workDir),
-    listFiles: createListFilesTool(workDir),
-    runCommand: createRunCommandTool(workDir)
-  };
+  // Build GitHub-aware tools when GitHub is connected
+  const hasGithub =
+    state.githubPat &&
+    state.githubOwner &&
+    state.githubRepo &&
+    state.featureBranch;
+
+  let tools: ToolSet;
+
+  if (hasGithub) {
+    const github = createGithubServices({ pat: state.githubPat as string });
+    const owner = state.githubOwner as string;
+    const repo = state.githubRepo as string;
+    const branch = state.featureBranch as string;
+
+    tools = {
+      readFile: createGithubReadFileTool(github, owner, repo, branch),
+      writeFile: createGithubWriteFileTool(github, owner, repo, branch),
+      listFiles: createGithubListFilesTool(github, owner, repo, branch)
+    };
+  } else {
+    // Fallback: no GitHub connected — agent can still attempt local run-command
+    // but file tools won't work without a workDir. This path is a degraded mode.
+    logger.warn(
+      { runId: state.runId },
+      "GitHub not connected — file tools unavailable"
+    );
+    tools = {
+      runCommand: createRunCommandTool(process.cwd())
+    };
+  }
 
   const model = createModel({
     provider: state.aiProvider,
@@ -62,26 +80,26 @@ export async function codingNode(
     model: "gemini-2.5-flash"
   });
 
-  const instructions = `You are an expert software engineer implementing Jira tickets.
+  const repoContextSection = state.repoContext
+    ? `\n## Repository Context\n${state.repoContext}\n`
+    : "";
 
-You MUST use tools to interact with the codebase.
+  const instructions = `You are an expert software engineer implementing Jira tickets against a real GitHub repository.
 
+You MUST use tools to interact with the codebase. All file operations go directly to GitHub via the API.
+${repoContextSection}
 Rules:
 - ALWAYS start with listFiles to understand project structure
 - ALWAYS read relevant files before modifying them
-- Use writeFile for all changes
-- Use runCommand to install deps or run tests
-- If tests fail → fix them
-- Continue until feature is COMPLETE
+- Use writeFile for all changes — each write commits directly to the feature branch
+- Do NOT use runCommand for git operations (already managed by the workflow)
+- Continue until the feature is COMPLETE and all acceptance criteria are met
 
 DO NOT return plain text explanations.
 DO NOT stop early.
-Keep working until the task is fully implemented.
-
-Working directory contains project files.`;
+Keep working until the task is fully implemented.`;
 
   try {
-    // Build rejection context if this ticket is the rejected one or comes after it
     let rejectionContext = "";
     if (state.rejectedTicketKey && state.rejectedTicketFeedback) {
       if (ticket.key === state.rejectedTicketKey) {
@@ -114,7 +132,7 @@ Ticket: ${ticket.key}
 Summary: ${ticket.summary}
 Description: ${ticket.description ?? "No description provided"}
 ${rejectionContext}
-Start by exploring the project, then implement the feature.`,
+Start by exploring the project with listFiles, then implement the feature.`,
       onStepFinish: ({ stepNumber, toolCalls }) => {
         logger.info(
           {
@@ -142,8 +160,7 @@ Start by exploring the project, then implement the feature.`,
     return {
       currentTicketKey: ticket.key,
       currentTicketSummary: ticket.summary,
-      completedTickets: [ticket.key],
-      workDir
+      completedTickets: [ticket.key]
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -159,7 +176,6 @@ Start by exploring the project, then implement the feature.`,
 
     return {
       failedTickets: [ticket.key],
-      workDir,
       error: message
     };
   }
