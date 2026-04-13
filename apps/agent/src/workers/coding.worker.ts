@@ -1,8 +1,8 @@
 import { createModel, generateText } from "@repo/ai";
 import { db } from "@repo/db";
 import { createGithubServices } from "@repo/github";
-import type { CodingJobPayload } from "@repo/queue";
-import { QUEUE_NAMES } from "@repo/queue";
+import type { CodingJobPayload, TestingJobPayload } from "@repo/queue";
+import { createTestingQueue, QUEUE_NAMES } from "@repo/queue";
 import { Worker } from "bullmq";
 import { codingGraph } from "../graphs/coding/graph";
 import { createJira } from "../lib/jira";
@@ -26,6 +26,8 @@ function slugify(s: string): string {
 }
 
 export function startCodingWorker() {
+  const testingQueue = createTestingQueue(redisConnection);
+
   const worker = new Worker<CodingJobPayload>(
     QUEUE_NAMES.CODING,
     async (job) => {
@@ -340,10 +342,23 @@ Write only the full updated CONTEXT.md content (Markdown).`
             );
           }
 
-          // Pause for HIL sprint review
+          // Hand off to testing worker
+          await testingQueue.add("testing", {
+            runId,
+            userId: job.data.userId,
+            projectId,
+            jiraProjectKey,
+            sprintId,
+            featureBranch,
+            githubPat: githubPat as string,
+            githubRepoUrl: githubRepoUrl as string,
+            aiProvider,
+            aiApiKey
+          } satisfies TestingJobPayload);
+
           await db.project.update({
             where: { id: projectId },
-            data: { status: "SPRINT_REVIEW", currentRunId: null }
+            data: { status: "TESTING" }
           });
 
           logger.info(
@@ -353,10 +368,10 @@ Write only the full updated CONTEXT.md content (Markdown).`
               completedTickets: result.completedTickets,
               failedTickets: result.failedTickets
             },
-            "Coding job completed — awaiting HIL sprint review"
+            "Coding job completed — testing enqueued"
           );
         } else {
-          // No GitHub — still pause for HIL review
+          // No GitHub — skip testing/security, go straight to HIL review
           await db.project.update({
             where: { id: projectId },
             data: { status: "SPRINT_REVIEW", currentRunId: null }
