@@ -12,6 +12,88 @@ import type { CodingStateType } from "../state";
 export async function codingNode(
   state: CodingStateType
 ): Promise<Partial<CodingStateType>> {
+  // ── PR fix mode ──────────────────────────────────────────────────────────
+  // When prFeedback is set, skip the Jira ticket loop and apply PR feedback directly.
+  if (state.prFeedback) {
+    logger.info(
+      { runId: state.runId },
+      "PR fix mode — applying PR reviewer feedback"
+    );
+
+    const hasGithub =
+      state.githubPat &&
+      state.githubOwner &&
+      state.githubRepo &&
+      state.featureBranch;
+
+    if (!hasGithub) {
+      return {
+        status: "failed",
+        error: "GitHub not connected — cannot apply PR feedback"
+      };
+    }
+
+    const github = createGithubServices({ pat: state.githubPat as string });
+    const owner = state.githubOwner as string;
+    const repo = state.githubRepo as string;
+    const branch = state.featureBranch as string;
+
+    const tools = {
+      readFile: createGithubReadFileTool(github, owner, repo, branch),
+      writeFile: createGithubWriteFileTool(github, owner, repo, branch),
+      listFiles: createGithubListFilesTool(github, owner, repo, branch)
+    };
+
+    const model = createModel({
+      provider: state.aiProvider,
+      apiKey: state.aiApiKey,
+      model: "gemini-2.5-flash"
+    });
+
+    const repoContextSection = state.repoContext
+      ? `\n## Repository Context\n${state.repoContext}\n`
+      : "";
+
+    const instructions = `You are an expert software engineer addressing GitHub PR review feedback.
+${repoContextSection}
+Rules:
+- ALWAYS start with listFiles to understand the current project structure
+- ALWAYS read the relevant files before modifying them
+- Use writeFile for all changes — each write commits directly to the feature branch
+- The open PR will auto-update when you push commits to this branch
+- Continue until ALL reviewer concerns are fully addressed`;
+
+    const agent = new ToolLoopAgent({
+      model,
+      tools,
+      instructions,
+      stopWhen: stepCountIs(60)
+    });
+
+    await agent.generate({
+      prompt: `A GitHub PR reviewer has requested changes. Address all of their feedback:
+
+PR Review Feedback:
+${state.prFeedback}
+
+Start by exploring the project with listFiles, read the relevant files, then implement all requested fixes.`,
+      onStepFinish: ({ stepNumber, toolCalls }) => {
+        logger.info(
+          {
+            runId: state.runId,
+            step: stepNumber,
+            toolsUsed: toolCalls?.map((t) => t.toolName)
+          },
+          "PR fix step completed"
+        );
+      }
+    });
+
+    logger.info({ runId: state.runId }, "PR fix completed");
+    return { status: "done" };
+  }
+
+  // ── Normal ticket loop mode ───────────────────────────────────────────────
   const jira = createJira(state.jiraProjectKey, state.jiraBoardId);
   const sprintIssues = await jira.issues.getSprintIssues(state.sprintId);
 

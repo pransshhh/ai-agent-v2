@@ -38,8 +38,11 @@ export function startCodingWorker() {
         aiProvider,
         aiApiKey,
         jiraProjectKey,
-        jiraBoardId
+        jiraBoardId,
+        prFeedback
       } = job.data;
+
+      const isPrFix = !!prFeedback;
 
       logger.info({ jobId: job.id, runId }, "Coding job started");
 
@@ -57,53 +60,82 @@ export function startCodingWorker() {
         githubOwner = parsed.owner;
         githubRepo = parsed.repo;
 
-        // Build feature branch name from sprintId + projectId slug
-        featureBranch = `feature/${sprintId}-${slugify(projectId)}`;
+        // Use explicit branch from payload (PR fix runs) or construct it
+        featureBranch =
+          job.data.featureBranch ?? `feature/${sprintId}-${slugify(projectId)}`;
 
-        // ── CONTEXT.md flow ────────────────────────────────────────────────
-        try {
-          const { content } = await github.repo.getFileContent(
-            githubOwner,
-            githubRepo,
-            "CONTEXT.md",
-            baseBranch
-          );
-          repoContext = content;
-          logger.info({ runId }, "Loaded existing CONTEXT.md");
-        } catch {
-          // CONTEXT.md doesn't exist — generate it
-          logger.info({ runId }, "CONTEXT.md not found — generating");
-
-          const tree = await github.repo.getRepoTree(
-            githubOwner,
-            githubRepo,
-            baseBranch
-          );
-          const filePaths = tree
-            .filter((e) => e.type === "blob")
-            .map((e) => e.path)
-            .join("\n");
-
-          // Attempt to read package.json and README.md for more context
-          const extras: string[] = [];
-          for (const candidate of ["package.json", "README.md", "readme.md"]) {
-            try {
-              const { content } = await github.repo.getFileContent(
-                githubOwner,
-                githubRepo,
-                candidate,
-                baseBranch
-              );
-              extras.push(`### ${candidate}\n\`\`\`\n${content}\n\`\`\``);
-            } catch {
-              // file doesn't exist, skip
-            }
+        // ── PR fix mode: just load existing CONTEXT.md, branch already exists ──
+        if (isPrFix) {
+          try {
+            const { content } = await github.repo.getFileContent(
+              githubOwner,
+              githubRepo,
+              "CONTEXT.md",
+              featureBranch as string
+            );
+            repoContext = content;
+            logger.info(
+              { runId },
+              "PR fix: loaded CONTEXT.md from feature branch"
+            );
+          } catch {
+            logger.info(
+              { runId },
+              "PR fix: no CONTEXT.md found, continuing without it"
+            );
           }
+        } else {
+          // ── Normal flow: CONTEXT.md flow + branch creation ─────────────
+          try {
+            const { content } = await github.repo.getFileContent(
+              githubOwner,
+              githubRepo,
+              "CONTEXT.md",
+              baseBranch
+            );
+            repoContext = content;
+            logger.info({ runId }, "Loaded existing CONTEXT.md");
+          } catch {
+            // CONTEXT.md doesn't exist — generate it
+            logger.info({ runId }, "CONTEXT.md not found — generating");
 
-          const model = createModel({ provider: aiProvider, apiKey: aiApiKey });
-          const { text } = await generateText({
-            model,
-            prompt: `You are a senior software engineer. Given the file tree and key files below, write a concise CONTEXT.md that explains:
+            const tree = await github.repo.getRepoTree(
+              githubOwner,
+              githubRepo,
+              baseBranch
+            );
+            const filePaths = tree
+              .filter((e) => e.type === "blob")
+              .map((e) => e.path)
+              .join("\n");
+
+            // Attempt to read package.json and README.md for more context
+            const extras: string[] = [];
+            for (const candidate of [
+              "package.json",
+              "README.md",
+              "readme.md"
+            ]) {
+              try {
+                const { content } = await github.repo.getFileContent(
+                  githubOwner,
+                  githubRepo,
+                  candidate,
+                  baseBranch
+                );
+                extras.push(`### ${candidate}\n\`\`\`\n${content}\n\`\`\``);
+              } catch {
+                // file doesn't exist, skip
+              }
+            }
+
+            const model = createModel({
+              provider: aiProvider,
+              apiKey: aiApiKey
+            });
+            const { text } = await generateText({
+              model,
+              prompt: `You are a senior software engineer. Given the file tree and key files below, write a concise CONTEXT.md that explains:
 - What this project does
 - Its tech stack and architecture
 - Key directories and their purpose
@@ -115,79 +147,83 @@ ${filePaths}
 ${extras.join("\n\n")}
 
 Write only the CONTEXT.md content (Markdown). Be concise but complete.`
-          });
+            });
 
-          repoContext = text;
+            repoContext = text;
 
-          // Write the generated CONTEXT.md to the feature branch.
-          // We create the branch first so we can write to it.
-          await github.repo.createBranch(
-            githubOwner,
-            githubRepo,
-            featureBranch as string,
-            baseBranch
-          );
-
-          await github.repo.writeFile(
-            githubOwner,
-            githubRepo,
-            "CONTEXT.md",
-            text,
-            "docs: add CONTEXT.md",
-            featureBranch as string
-          );
-
-          logger.info(
-            { runId },
-            "Generated and wrote CONTEXT.md to feature branch"
-          );
-        }
-
-        // If we didn't create the branch above (CONTEXT.md already existed), create it now
-        if (repoContext !== null) {
-          try {
+            // Write the generated CONTEXT.md to the feature branch.
+            // We create the branch first so we can write to it.
             await github.repo.createBranch(
               githubOwner,
               githubRepo,
-              featureBranch,
+              featureBranch as string,
               baseBranch
             );
-            logger.info({ runId, featureBranch }, "Created feature branch");
-          } catch (err: unknown) {
-            // Branch may already exist (e.g. retry run) — that's fine
-            const msg = err instanceof Error ? err.message : String(err);
-            if (
-              !msg.includes("already exists") &&
-              !msg.includes("Reference already exists")
-            ) {
-              throw err;
-            }
+
+            await github.repo.writeFile(
+              githubOwner,
+              githubRepo,
+              "CONTEXT.md",
+              text,
+              "docs: add CONTEXT.md",
+              featureBranch as string
+            );
+
             logger.info(
-              { runId, featureBranch },
-              "Feature branch already exists"
+              { runId },
+              "Generated and wrote CONTEXT.md to feature branch"
             );
           }
-        }
+
+          // If we didn't create the branch above (CONTEXT.md already existed), create it now
+          if (repoContext !== null) {
+            try {
+              await github.repo.createBranch(
+                githubOwner,
+                githubRepo,
+                featureBranch,
+                baseBranch
+              );
+              logger.info({ runId, featureBranch }, "Created feature branch");
+            } catch (err: unknown) {
+              // Branch may already exist (e.g. retry run) — that's fine
+              const msg = err instanceof Error ? err.message : String(err);
+              if (
+                !msg.includes("already exists") &&
+                !msg.includes("Reference already exists")
+              ) {
+                throw err;
+              }
+              logger.info(
+                { runId, featureBranch },
+                "Feature branch already exists"
+              );
+            }
+          }
+        } // end else (normal flow)
       }
 
-      // ── Activate sprint in Jira ───────────────────────────────────────────
+      // ── Activate sprint in Jira (skipped for PR fix runs) ────────────────
       const jira = createJira(jiraProjectKey, jiraBoardId);
-      const now = new Date();
-      const twoWeeksLater = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
 
-      try {
-        await jira.sprints.updateSprint(sprintId, {
-          state: "active",
-          startDate: now.toISOString(),
-          endDate: twoWeeksLater.toISOString()
-        });
-        logger.info({ runId, sprintId }, "Sprint activated");
-      } catch (err) {
-        // Sprint may already be active (retry), log and continue
-        logger.warn(
-          { runId, sprintId, err },
-          "Could not activate sprint (may already be active)"
+      if (!isPrFix) {
+        const now = new Date();
+        const twoWeeksLater = new Date(
+          now.getTime() + 14 * 24 * 60 * 60 * 1000
         );
+        try {
+          await jira.sprints.updateSprint(sprintId, {
+            state: "active",
+            startDate: now.toISOString(),
+            endDate: twoWeeksLater.toISOString()
+          });
+          logger.info({ runId, sprintId }, "Sprint activated");
+        } catch (err) {
+          logger.warn(
+            { runId, sprintId, err },
+            "Could not activate sprint (may already be active)"
+          );
+        }
       }
 
       try {
@@ -210,7 +246,8 @@ Write only the CONTEXT.md content (Markdown). Be concise but complete.`
           featureBranch,
           repoContext,
           rejectedTicketKey: job.data.rejectedTicketKey ?? null,
-          rejectedTicketFeedback: job.data.rejectedTicketFeedback ?? null
+          rejectedTicketFeedback: job.data.rejectedTicketFeedback ?? null,
+          prFeedback: prFeedback ?? null
         });
 
         if (result.status === "failed") {
@@ -222,7 +259,18 @@ Write only the CONTEXT.md content (Markdown). Be concise but complete.`
         }
 
         // ── Post-graph: update CONTEXT.md + handle PR / sprint close ─────
-        if (hasGithub && githubOwner && githubRepo && featureBranch) {
+        if (isPrFix) {
+          // PR fix run — commits already pushed to feature branch, open PR auto-updates.
+          // Just return to IDLE so the user can re-review on GitHub.
+          await db.project.update({
+            where: { id: projectId },
+            data: { status: "IDLE", currentRunId: null }
+          });
+          logger.info(
+            { jobId: job.id, runId },
+            "PR fix completed — returning to IDLE"
+          );
+        } else if (hasGithub && githubOwner && githubRepo && featureBranch) {
           const github = createGithubServices({ pat: githubPat as string });
 
           // Update CONTEXT.md with a summary of what was implemented this sprint
@@ -259,22 +307,30 @@ Write only the full updated CONTEXT.md content (Markdown).`
           const isFinalSprint = futureSprints.length === 0;
 
           if (isFinalSprint) {
-            // Create PR from feature branch → base branch
-            const prUrl = await github.pr.createPullRequest(
-              githubOwner,
-              githubRepo,
-              featureBranch,
-              baseBranch,
-              `feat: sprint ${sprintId} — ${completedSummary}`,
-              `## Summary\n\nImplemented by AI coding agent during sprint ${sprintId}.\n\n**Tickets:** ${completedSummary}\n\n---\n*Generated by AI Dev Agent*`
-            );
-
-            await db.project.update({
-              where: { id: projectId },
-              data: { githubPrUrl: prUrl }
+            // Check if PR was already created (e.g. retry after HIL ticket rejection)
+            const currentProject = await db.project.findUnique({
+              where: { id: projectId }
             });
-
-            logger.info({ runId, prUrl }, "Created PR — final sprint");
+            if (currentProject?.githubPrUrl) {
+              logger.info(
+                { runId },
+                "PR already exists — new commits auto-update it"
+              );
+            } else {
+              const prUrl = await github.pr.createPullRequest(
+                githubOwner,
+                githubRepo,
+                featureBranch,
+                baseBranch,
+                `feat: sprint ${sprintId} — ${completedSummary}`,
+                `## Summary\n\nImplemented by AI coding agent during sprint ${sprintId}.\n\n**Tickets:** ${completedSummary}\n\n---\n*Generated by AI Dev Agent*`
+              );
+              await db.project.update({
+                where: { id: projectId },
+                data: { githubPrUrl: prUrl }
+              });
+              logger.info({ runId, prUrl }, "Created PR — final sprint");
+            }
           } else {
             // Close current sprint so the human can start the next one
             await jira.sprints.updateSprint(sprintId, { state: "closed" });
@@ -283,23 +339,33 @@ Write only the full updated CONTEXT.md content (Markdown).`
               "Closed sprint — more sprints remain"
             );
           }
+
+          // Pause for HIL sprint review
+          await db.project.update({
+            where: { id: projectId },
+            data: { status: "SPRINT_REVIEW", currentRunId: null }
+          });
+
+          logger.info(
+            {
+              jobId: job.id,
+              runId,
+              completedTickets: result.completedTickets,
+              failedTickets: result.failedTickets
+            },
+            "Coding job completed — awaiting HIL sprint review"
+          );
+        } else {
+          // No GitHub — still pause for HIL review
+          await db.project.update({
+            where: { id: projectId },
+            data: { status: "SPRINT_REVIEW", currentRunId: null }
+          });
+          logger.info(
+            { jobId: job.id, runId },
+            "Coding job completed — awaiting HIL sprint review"
+          );
         }
-
-        // Pause for HIL sprint review
-        await db.project.update({
-          where: { id: projectId },
-          data: { status: "SPRINT_REVIEW", currentRunId: null }
-        });
-
-        logger.info(
-          {
-            jobId: job.id,
-            runId,
-            completedTickets: result.completedTickets,
-            failedTickets: result.failedTickets
-          },
-          "Coding job completed — awaiting HIL sprint review"
-        );
 
         return result;
       } catch (err) {

@@ -41,6 +41,7 @@ import {
   useDisconnectGithub,
   useLinkJira,
   useProject,
+  useRejectPr,
   useRejectSprintReview,
   useResetProject,
   useStartCoding,
@@ -325,6 +326,71 @@ function RejectDialog({
         <DialogFooter>
           <Button variant="destructive" onClick={handleSubmit}>
             Reject &amp; Retry
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </DialogRoot>
+  );
+}
+
+function RejectPrDialog({
+  onReject
+}: {
+  onReject: (feedback: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [feedback, setFeedback] = useState("");
+  const [error, setError] = useState<string | undefined>();
+
+  const handleSubmit = () => {
+    if (!feedback.trim()) {
+      setError("Feedback is required");
+      return;
+    }
+    onReject(feedback.trim());
+    setOpen(false);
+    setFeedback("");
+    setError(undefined);
+  };
+
+  return (
+    <DialogRoot open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          <Button variant="outline" size="sm">
+            <X className="size-3.5" />
+            PR Changes Requested
+          </Button>
+        }
+      />
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>PR Changes Requested</DialogTitle>
+          <DialogDescription>
+            The coding agent will apply the reviewer's feedback directly to the
+            feature branch. The open PR will auto-update.
+          </DialogDescription>
+        </DialogHeader>
+        <FieldGroup>
+          <Field data-invalid={!!error}>
+            <FieldLabel htmlFor="pr-feedback">Reviewer Feedback</FieldLabel>
+            <Textarea
+              id="pr-feedback"
+              placeholder="Paste the PR review comments or describe the requested changes..."
+              value={feedback}
+              onChange={(e) => {
+                setFeedback(e.target.value);
+                setError(undefined);
+              }}
+              rows={5}
+              className="resize-none"
+            />
+            {error && <FieldError errors={[{ message: error }]} />}
+          </Field>
+        </FieldGroup>
+        <DialogFooter>
+          <Button variant="destructive" onClick={handleSubmit}>
+            Apply Fixes
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -897,6 +963,7 @@ function ProjectPage({ id }: { id: string }) {
   const { mutate: approvePlanning } = useApprovePlanning(id);
   const { mutate: approveSprintReview } = useApproveSprintReview(id);
   const { mutate: rejectSprintReview } = useRejectSprintReview(id);
+  const { mutate: rejectPr } = useRejectPr(id);
   const { mutate: resetProject, isPending: isResetting } = useResetProject(id);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -953,6 +1020,15 @@ function ProjectPage({ id }: { id: string }) {
         }
       ]);
       addLog("Sprint review actioned. Coding agent restarted.", "info");
+    } else if (
+      prev === "CODING" &&
+      project.status === "IDLE" &&
+      project.githubPrUrl
+    ) {
+      addMsg(
+        "PR fixes applied! The feature branch has been updated — review the PR on GitHub."
+      );
+      addLog("PR fix complete. Feature branch updated.", "success");
     } else if (prev === "CODING" && project.status === "IDLE") {
       addMsg(
         "All done! The backlog is empty and all tickets have been implemented."
@@ -1080,6 +1156,34 @@ function ProjectPage({ id }: { id: string }) {
     [rejectSprintReview]
   );
 
+  const handleRejectPr = useCallback(
+    (feedback: string) => {
+      setLogs((l) => [
+        ...l,
+        mkLog(
+          "PR changes requested. Agent will apply fixes to the feature branch.",
+          "info"
+        )
+      ]);
+      rejectPr(
+        { feedback },
+        {
+          onError: (err) => {
+            setMessages((m) => [
+              ...m,
+              {
+                id: crypto.randomUUID(),
+                role: "agent",
+                content: `Error: ${err.message}`
+              }
+            ]);
+          }
+        }
+      );
+    },
+    [rejectPr]
+  );
+
   const handleLinkJira = useCallback((key: string) => {
     setMessages((m) => [
       ...m,
@@ -1113,12 +1217,17 @@ function ProjectPage({ id }: { id: string }) {
         <div className="flex items-center gap-2">
           <GithubConnectButton project={project} />
           {project.githubPrUrl && (
-            <a href={project.githubPrUrl} target="_blank" rel="noreferrer">
-              <Button variant="outline" size="sm">
-                <ExternalLink className="size-3.5" />
-                View PR
-              </Button>
-            </a>
+            <>
+              <a href={project.githubPrUrl} target="_blank" rel="noreferrer">
+                <Button variant="outline" size="sm">
+                  <ExternalLink className="size-3.5" />
+                  View PR
+                </Button>
+              </a>
+              {project.status === "IDLE" && (
+                <RejectPrDialog onReject={handleRejectPr} />
+              )}
+            </>
           )}
           {project.status === "FAILED" && (
             <Button

@@ -1,6 +1,6 @@
 # AI Dev Agent V2
 
-An agentic AI platform where users describe what to build, a planning agent creates Jira epics/stories in the backlog, a human reviews and creates sprints in Jira, and a coding agent implements tickets against a real GitHub repo with HIL sprint reviews.
+An agentic AI platform where users describe what to build, a planning agent creates Jira epics/stories in the backlog, a human reviews and creates sprints in Jira, and a coding agent implements tickets against a real GitHub repo — followed by automated testing and security scanning — with HIL sprint reviews.
 
 ## Repo structure
 
@@ -17,8 +17,18 @@ apps/agent/src/
   graphs/
     planning/       # graph.ts, state.ts, nodes/jira.node.ts
     coding/         # graph.ts, state.ts, nodes/coding.node.ts
-  tools/            # read-file, write-file, list-files, run-command, utils
-  workers/          # planning.worker.ts, coding.worker.ts
+    testing/        # TO BUILD
+    security/       # TO BUILD
+  tools/
+    github-read-file.ts   # getFileContent via GitHub API
+    github-write-file.ts  # writeFile via GitHub API (auto-fetches SHA)
+    github-list-files.ts  # getRepoTree via GitHub API
+    run-command.ts        # kept for future test running
+  workers/
+    planning.worker.ts
+    coding.worker.ts
+    testing.worker.ts     # TO BUILD
+    security.worker.ts    # TO BUILD
   lib/              # jira, logger, redis
 
 apps/web/src/
@@ -26,19 +36,19 @@ apps/web/src/
   hooks/            # use-auth, use-projects, use-jira
   components/       # app-sidebar, user-menu, ui/ (shadcn)
   routes/
-    index.tsx               # landing
-    auth/                   # signup, signin, verify + guards
+    index.tsx
+    auth/
     dashboard/
-      index.tsx             # project list
+      index.tsx
       projects/$id/
-        index.tsx           # project page — chat left, logs right
-        jira.tsx            # jira board — backlog + kanban tabs
-        route.tsx           # param loader
+        index.tsx   # chat left, logs+status right
+        jira.tsx    # backlog + kanban tabs
+        route.tsx
 
 packages/
   ai/       # createModel(config) — anthropic, gemini, openai via Vercel AI SDK
   db/       # Prisma client + schema
-  github/   # createGithubClient(pat) → Octokit — repo tree, file read/write, branch, PR
+  github/   # createGithubClient(pat) → Octokit — repo tree, file read/write, branch, PR, context
   jira/     # createJiraServices(config) → { boards, sprints, issues, epics }
   queue/    # BullMQ queue definitions + job payloads
   zod/      # shared schemas: ./agent ./auth ./common ./jira ./project
@@ -65,7 +75,9 @@ docker exec ai-agent-redis redis-cli FLUSHALL
 - **Packages:** no build step — export TS source directly via `tsx`
 - **Sprint activation:** must pass both `startDate` + `endDate` to `updateSprint`
 - **AI providers:** plug-and-play via `createModel({ provider, apiKey })` — Gemini (dev), Claude Sonnet (prod)
-- **GitHub PAT:** AES encrypted at rest — never return raw PAT to frontend, never log it
+- **GitHub PAT:** AES-256-GCM encrypted at rest in DB — never return raw PAT to frontend, never log it
+- **GitHub writeFile:** must fetch current file SHA before updating an existing file — GitHub API requires it
+- **Each writeFile = one commit** — GitHub contents API commits per file write, results in noisy history. Acceptable for now.
 
 ## Database schema
 
@@ -75,7 +87,9 @@ enum ProjectStatus {
   PLANNING       # planning agent running
   PLANNED        # backlog created, human reviews in Jira
   CODING         # coding agent running
-  SPRINT_REVIEW  # sprint done, awaiting HIL approve/reject
+  TESTING        # testing agent running
+  SECURITY_SCAN  # security agent running
+  SPRINT_REVIEW  # all agents done, awaiting HIL approve/reject
   FAILED
 }
 
@@ -86,10 +100,10 @@ model Project {
   userId           String
   jiraProjectKey   String?
   jiraBoardId      Int?
-  jiraSprintId     Int?          # sprint currently being coded
+  jiraSprintId     Int?
   status           ProjectStatus @default(IDLE)
   currentRunId     String?
-  githubRepoUrl    String?       # https://github.com/org/repo
+  githubRepoUrl    String?
   githubPat        String?       # AES encrypted, never returned to frontend
   githubBaseBranch String?       # default: main
   githubPrUrl      String?       # set after PR created on final sprint approve
@@ -101,14 +115,14 @@ model Project {
 ## API routes (/api/v1, cookie-auth except /auth)
 
 ```
-POST   /auth/signup + /signup/verify
-POST   /auth/signin + /signin/verify
-POST   /auth/signout
-GET    /auth/me
+POST /auth/signup + /signup/verify
+POST /auth/signin + /signin/verify
+POST /auth/signout
+GET  /auth/me
 
 GET|POST          /projects
 GET|PATCH|DELETE  /projects/:id
-POST   /projects/:id/jira/link              { projectKey }
+POST   /projects/:id/jira/link
 DELETE /projects/:id/jira/unlink
 POST   /projects/:id/github/connect         { repoUrl, pat, baseBranch? }
 DELETE /projects/:id/github/disconnect
@@ -121,41 +135,43 @@ POST   /projects/:id/agent/sprint/reject    { runId, issueKey, feedback } → re
 GET  /jira/sprints?state=active|future|closed
 GET  /jira/sprints/active
 GET  /jira/sprints/:sprintId/issues
-# ...standard jira CRUD
 ```
 
-## Full user flow
+## Full agent pipeline per sprint
 
 ```
-signup → create project → connect GitHub → link Jira → submit prompt
-
-planning/start → agent creates epics + stories (NO sprint) → status = PLANNED
-
-human: review tickets in Jira → create sprint → move tickets in → come back to app
-
 coding/start { sprintId } → coding worker:
-  1. check CONTEXT.md on base branch:
-       - exists → read it → use as system context
-       - missing → fetch repo tree + key files → LLM generates CONTEXT.md
-                 → write to feature branch (included in first PR)
-  2. create feature branch: feature/{sprintId}-{slug} via GitHub API
+  1. CONTEXT.md: read from base branch or generate via LLM → write to feature branch
+  2. create feature branch: feature/{sprintId}-{slug}
   3. activate sprint in Jira
   4. for each ticket:
-       → In Progress (Jira)
-       → ToolLoopAgent with GitHub-aware file tools:
-           readFile  → GET /repos/.../contents/{path}?ref={branch}
-           writeFile → PUT /repos/.../contents/{path} (auto-commits to branch)
-           listFiles → GET /repos/.../git/trees/{sha}?recursive=1
-       → Done (Jira)
-  5. update CONTEXT.md with sprint summary → write to feature branch
-  6. status = SPRINT_REVIEW
+       → In Progress → ToolLoopAgent (github read/write/list tools) → Done
+  5. update CONTEXT.md → write to feature branch
+  6. enqueue testing job → status = TESTING
 
-HIL approve:
-  - more sprints remain → close sprint → status = IDLE → human repeats from "create sprint"
-  - final sprint → create PR (base: main, head: feature branch) → save githubPrUrl → status = IDLE
+→ testing worker:
+  1. read implemented files from feature branch
+  2. read CONTEXT.md for stack context
+  3. ToolLoopAgent writes test files to feature branch
+  4. post test summary as Jira comment on each ticket
+  5. enqueue security job → status = SECURITY_SCAN
 
-HIL reject { issueKey, feedback }:
-  → retry that ticket with feedback → overwrite files on same branch → status = SPRINT_REVIEW
+→ security worker:
+  1. fetch diff: changed files on feature branch vs base branch
+  2. LLM scans for: hardcoded secrets, injection risks, missing validation,
+     auth gaps, exposed endpoints, unsafe dependencies
+  3. produces report: { critical: [], warnings: [], info: [] }
+  4. post security report as Jira comment on sprint tickets
+  5. if critical issues → status = SPRINT_REVIEW (flagged)
+     if clean → status = SPRINT_REVIEW (green)
+
+→ SPRINT_REVIEW:
+  HIL sees: coding summary + test results + security report
+  approve:
+    - more sprints → close sprint → status = IDLE → human creates next sprint
+    - final sprint → createPR → save githubPrUrl → status = IDLE
+  reject { issueKey, feedback }:
+    → retry that ticket → status = SPRINT_REVIEW again
 ```
 
 ## packages/github
@@ -163,24 +179,59 @@ HIL reject { issueKey, feedback }:
 ```
 src/
   client.ts    # createGithubClient(pat) → Octokit instance
-  repo.ts      # getRepoTree, getFileContent, createBranch, writeFile(path, content, message, branch, sha?)
+  repo.ts      # getRepoTree, getFileContent, createBranch, writeFile, getFileDiff
   pr.ts        # createPullRequest(owner, repo, head, base, title, body) → PR url
   context.ts   # generateContext(owner, repo, branch) → CONTEXT.md string
                # updateContext(existing, sprintSummary) → updated CONTEXT.md string
   index.ts
 ```
 
-DI pattern — `createGithubClient(pat)` takes PAT as argument, no `process.env` inside package.
-`writeFile` needs `sha` param for updates (GitHub API requires blob SHA to overwrite existing files).
-Both `apps/api` (validate repo on connect) and `apps/agent` (file tools + PR) consume this package.
+DI pattern — no `process.env` inside package. Both `apps/api` and `apps/agent` consume it.
 
-## Agent file tools
+## Testing agent spec
 
-Current tools in `apps/agent/src/tools/` will be replaced with GitHub API equivalents:
-- `read-file.ts` → `getFileContent(owner, repo, path, branch)`
-- `write-file.ts` → `writeFile(owner, repo, path, content, message, branch, sha?)`
-- `list-files.ts` → `getRepoTree(owner, repo, branch)`
-- `run-command.ts` → keep (future: test running) but remove any git operations
+- **Graph:** `graphs/testing/` — single node `testing.node.ts`
+- **Input state:** githubOwner, githubRepo, githubPat, featureBranch, repoContext, tickets[]
+- **Tools:** github-read-file, github-write-file, github-list-files (same as coding agent)
+- **System prompt focus:**
+  - Read implemented files for each ticket
+  - Write focused unit tests only — no integration test infrastructure
+  - No new test frameworks unless one already exists in the repo (detect from package.json)
+  - No jest/vitest setup if not already present — use whatever is in the repo
+  - Test file naming: `{filename}.test.{ext}` co-located with source file
+  - Do not modify source files
+- **Output:** test file paths written, summary string per ticket
+- **Worker:** enqueues security job on completion
+
+## Security agent spec
+
+- **Graph:** `graphs/security/` — single node `security.node.ts`
+- **Input state:** githubOwner, githubRepo, githubPat, featureBranch, baseBranch, tickets[]
+- **Tools:** github-read-file, github-list-files (read-only — security agent never writes code)
+- **What it scans (per changed file):**
+  - Hardcoded secrets, tokens, passwords
+  - SQL/NoSQL injection patterns
+  - Missing input validation on endpoints
+  - Auth/authz gaps (unprotected routes, missing middleware)
+  - Exposed sensitive data in responses
+  - Use of dangerous functions (eval, exec without sanitization)
+- **Output:** `{ critical: string[], warnings: string[], info: string[] }`
+- **Worker:**
+  - Posts report as a Jira comment on the sprint's first ticket
+  - Saves report to project (new `lastSecurityReport` JSON field on Project)
+  - Sets status = SPRINT_REVIEW regardless of findings (human decides to proceed)
+
+## Sprint review UI (updated)
+
+When status = SPRINT_REVIEW, right panel shows:
+```
+✅ Coding — X tickets implemented
+✅ Tests — X test files written
+⚠️  Security — X warnings, X critical   ← red if critical, yellow if warnings, green if clean
+    [view details]
+[Approve]  [Reject with feedback]
+```
+If critical security issues exist, Approve shows a confirmation warning before proceeding.
 
 ## Code style
 
@@ -188,23 +239,32 @@ Current tools in `apps/agent/src/tools/` will be replaced with GitHub API equiva
 - Module pattern: `.router.ts` / `.controller.ts` / `.service.ts`
 - Errors: `AppError(message, statusCode, code?)`
 - Env: Zod-validated `config/env.ts` per app
-- Packages: DI pattern — no `process.env` inside packages, callers inject config
+- Packages: DI pattern — no `process.env` inside packages
+
+## Agent prompt discipline
+
+When writing planning prompts, always include:
+- Exact library to use (e.g. "use mongoose, not the mongodb driver")
+- Explicit "Do not" list (no tests, no retry logic, no extra abstractions unless asked)
+- Keep it minimal — agent fills gaps with over-engineering by default
 
 ## Status
 
 **Done:**
 - Auth, projects CRUD, Jira integration
-- Planning agent (creates epics + stories in backlog, no sprint)
-- Coding agent (local file tools — to be replaced)
-- HIL sprint review flow (SPRINT_REVIEW status, approve/reject endpoints)
-- Full frontend (landing, auth, dashboard, project chat+logs, Jira board)
-- `packages/github` (client, repo, pr — built, not yet wired in)
+- Planning agent (epics + stories in backlog, no sprint)
+- Coding agent (GitHub API file tools, CONTEXT.md flow)
+- HIL sprint review (SPRINT_REVIEW, approve/reject)
+- GitHub integration (connect/disconnect, PAT encryption, feature branch, PR creation)
+- Full frontend (landing, auth, dashboard, project chat+logs, Jira board, GitHub connect UI)
 
-**In progress — GitHub integration (remaining steps):**
-2. DB migration — add github fields to Project (githubRepoUrl, githubPat, githubBaseBranch, githubPrUrl)
-3. Zod — add `ZConnectGithubRequest`, update `ZProject` with github fields, add `ZStartCodingRequest { sprintId }`
-4. API — `github/connect` (validate + encrypt PAT) + `github/disconnect`, update `coding/start` to accept `sprintId`
-5. Coding worker — replace local file tools with GitHub API tools, add CONTEXT.md flow, add PR on final approve
-6. Frontend — GitHub connect dialog, "Start Coding Sprint" sprint-picker, "View PR" button
+**Next — testing + security agents (in order):**
+1. DB migration — add `TESTING`, `SECURITY_SCAN` to ProjectStatus enum, add `lastSecurityReport Json?` to Project
+2. Zod — update `ZProjectStatus`, add `ZSecurityReport`
+3. Queue — add `testing` and `security` queue names + job payload types
+4. Testing agent — graph, node, worker (enqueues security on completion)
+5. Security agent — graph, node, worker (sets SPRINT_REVIEW on completion)
+6. Coding worker — replace `status = SPRINT_REVIEW` with enqueue testing job + `status = TESTING`
+7. Frontend — update sprint review panel to show test + security results
 
-**Deferred:** Realtime logs (Socket.io), S3, org/team support.
+**Deferred:** Realtime logs (Socket.io), S3, org/team support, GitHub OAuth App.

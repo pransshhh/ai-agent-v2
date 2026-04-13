@@ -81,6 +81,12 @@ export const CodingState = Annotation.Root({
     reducer: (_, b) => b
   }),
 
+  // GitHub PR review feedback — set when a PR reviewer requested changes
+  prFeedback: Annotation<string | null>({
+    default: () => null,
+    reducer: (_, b) => b
+  }),
+
   // Working directory on the agent server
   workDir: Annotation<string | null>({
     default: () => null,

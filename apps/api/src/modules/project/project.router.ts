@@ -1,4 +1,5 @@
 import {
+  ZRejectPrRequest,
   ZRejectSprintRequest,
   ZStartCodingRequest,
   ZStartPlanningRequest
@@ -98,6 +99,12 @@ projectRouter.post(
   "/:id/agent/sprint/reject",
   validate({ params: ZProjectIdParam, body: ZRejectSprintRequest }),
   agentController.rejectSprintReview
+);
+
+projectRouter.post(
+  "/:id/agent/pr/reject",
+  validate({ params: ZProjectIdParam, body: ZRejectPrRequest }),
+  agentController.rejectPr
 );
 
 projectRouter.post(

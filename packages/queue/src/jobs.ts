@@ -39,9 +39,42 @@ export interface CodingJobPayload {
   rejectedTicketKey?: string;
   /** Feedback from the human reviewer for the rejected ticket. */
   rejectedTicketFeedback?: string;
+  /** Feedback from a GitHub PR reviewer. When set, agent fixes the PR instead of iterating tickets. */
+  prFeedback?: string;
+  /** Explicit feature branch name — used for PR fix runs where the branch already exists. */
+  featureBranch?: string;
+}
+
+export interface TestingJobPayload {
+  runId: string;
+  userId: string;
+  projectId: string;
+  jiraProjectKey: string;
+  sprintId: number;
+  featureBranch: string;
+  githubPat: string;
+  githubRepoUrl: string;
+  aiProvider: "anthropic" | "gemini" | "openai";
+  aiApiKey: string;
+}
+
+export interface SecurityJobPayload {
+  runId: string;
+  userId: string;
+  projectId: string;
+  jiraProjectKey: string;
+  sprintId: number;
+  featureBranch: string;
+  githubPat: string;
+  githubRepoUrl: string;
+  githubBaseBranch: string;
+  aiProvider: "anthropic" | "gemini" | "openai";
+  aiApiKey: string;
 }
 
 export type JobPayload =
   | PlanningJobPayload
   | SprintPlanningJobPayload
-  | CodingJobPayload;
+  | CodingJobPayload
+  | TestingJobPayload
+  | SecurityJobPayload;

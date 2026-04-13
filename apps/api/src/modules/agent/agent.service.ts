@@ -1,5 +1,6 @@
 import { db } from "@repo/db";
 import type {
+  RejectPrRequest,
   RejectSprintRequest,
   StartCodingRequest,
   StartPlanningRequest
@@ -9,6 +10,14 @@ import { decrypt } from "../../lib/crypto";
 import { createJira } from "../../lib/jira";
 import { codingQueue, planningQueue } from "../../lib/queue";
 import { AppError } from "../../middleware/error";
+
+function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40);
+}
 
 export const agentService = {
   async startPlanning(
@@ -196,7 +205,12 @@ export const agentService = {
 
     await db.project.update({
       where: { id: projectId },
-      data: { status: nextStatus, currentRunId: null, jiraSprintId: null }
+      data: {
+        status: nextStatus,
+        currentRunId: null,
+        // Keep jiraSprintId when a PR exists — needed to reconstruct the feature branch for PR fix runs
+        jiraSprintId: project.githubPrUrl ? project.jiraSprintId : null
+      }
     });
 
     return { status: nextStatus };
@@ -335,6 +349,73 @@ export const agentService = {
       githubBaseBranch: project.githubBaseBranch ?? "main",
       rejectedTicketKey: input.issueKey,
       rejectedTicketFeedback: input.feedback
+    });
+
+    return { jobId: job.id ?? "", runId: codingRunId };
+  },
+
+  async rejectPr(projectId: string, userId: string, input: RejectPrRequest) {
+    const project = await db.project.findUnique({ where: { id: projectId } });
+    if (!project)
+      throw new AppError("Project not found", 404, "PROJECT_NOT_FOUND");
+    if (project.userId !== userId)
+      throw new AppError("Forbidden", 403, "FORBIDDEN");
+    if (project.status !== "IDLE") {
+      throw new AppError(
+        "Project is not in IDLE status",
+        400,
+        "INVALID_STATUS"
+      );
+    }
+    if (!project.githubPrUrl) {
+      throw new AppError("No open PR found for this project", 400, "NO_PR");
+    }
+    if (!project.githubRepoUrl || !project.githubPat) {
+      throw new AppError(
+        "GitHub not connected to this project",
+        400,
+        "GITHUB_NOT_CONNECTED"
+      );
+    }
+    if (!project.jiraSprintId) {
+      throw new AppError(
+        "Sprint ID not available — cannot determine feature branch",
+        400,
+        "NO_SPRINT"
+      );
+    }
+    if (!project.jiraProjectKey || !project.jiraBoardId) {
+      throw new AppError(
+        "Jira not linked to this project",
+        400,
+        "JIRA_NOT_LINKED"
+      );
+    }
+
+    const decryptedPat = decrypt(project.githubPat, env.GITHUB_PAT_SECRET);
+    const featureBranch = `feature/${project.jiraSprintId}-${slugify(projectId)}`;
+    const codingRunId = crypto.randomUUID();
+
+    await db.project.update({
+      where: { id: projectId },
+      data: { status: "CODING", currentRunId: codingRunId }
+    });
+
+    const job = await codingQueue.add("coding", {
+      runId: codingRunId,
+      userId,
+      projectId,
+      jiraProjectKey: project.jiraProjectKey,
+      jiraBoardId: project.jiraBoardId,
+      sprintId: project.jiraSprintId,
+      s3Prefix: `projects/${projectId}/`,
+      aiProvider: "gemini",
+      aiApiKey: env.GOOGLE_GENERATIVE_AI_API_KEY,
+      githubPat: decryptedPat,
+      githubRepoUrl: project.githubRepoUrl,
+      githubBaseBranch: project.githubBaseBranch ?? "main",
+      featureBranch,
+      prFeedback: input.feedback
     });
 
     return { jobId: job.id ?? "", runId: codingRunId };

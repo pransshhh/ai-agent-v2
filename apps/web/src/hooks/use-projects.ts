@@ -145,3 +145,14 @@ export function useRejectSprintReview(projectId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["projects", projectId] })
   });
 }
+
+export function useRejectPr(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation<AgentJobResponse, Error, { feedback: string }>({
+    mutationFn: (data) =>
+      api
+        .post(`/api/v1/projects/${projectId}/agent/pr/reject`, data)
+        .then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects", projectId] })
+  });
+}

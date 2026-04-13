@@ -4,12 +4,16 @@ export type {
   CodingJobPayload,
   JobPayload,
   PlanningJobPayload,
-  SprintPlanningJobPayload
+  SecurityJobPayload,
+  SprintPlanningJobPayload,
+  TestingJobPayload
 } from "./jobs";
 export type { QueueName } from "./names";
 export { QUEUE_NAMES } from "./names";
 export {
   createCodingQueue,
   createPlanningQueue,
-  createSprintPlanningQueue
+  createSecurityQueue,
+  createSprintPlanningQueue,
+  createTestingQueue
 } from "./queues";
