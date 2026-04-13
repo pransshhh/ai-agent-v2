@@ -1,3 +1,4 @@
+import { ZSecurityReport } from "@repo/zod/agent";
 import type { Project, ProjectStatus } from "@repo/zod/project";
 import { ZConnectGithubRequest, ZLinkJiraRequest } from "@repo/zod/project";
 import { useForm } from "@tanstack/react-form";
@@ -5,6 +6,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   BotIcon,
   Check,
+  ChevronDown,
   ExternalLink,
   GitBranch,
   Loader2,
@@ -84,6 +86,8 @@ const STATUS_BADGE: Record<
   PLANNING: { label: "Planning", variant: "warning" },
   PLANNED: { label: "Planned", variant: "purple" },
   CODING: { label: "Coding", variant: "info" },
+  TESTING: { label: "Testing", variant: "info" },
+  SECURITY_SCAN: { label: "Security Scan", variant: "warning" },
   SPRINT_REVIEW: { label: "Sprint Review", variant: "success" },
   FAILED: { label: "Failed", variant: "destructive" }
 };
@@ -92,29 +96,37 @@ const TIMELINE: Exclude<ProjectStatus, "FAILED" | "SPRINT_REVIEW">[] = [
   "IDLE",
   "PLANNING",
   "PLANNED",
-  "CODING"
+  "CODING",
+  "TESTING",
+  "SECURITY_SCAN"
 ];
 const TIMELINE_LABELS: Record<string, string> = {
   IDLE: "Idle",
   PLANNING: "Planning",
   PLANNED: "Planned",
-  CODING: "Coding"
+  CODING: "Coding",
+  TESTING: "Testing",
+  SECURITY_SCAN: "Security"
 };
 
 function StatusTimeline({ status }: { status: ProjectStatus }) {
   const isFailed = status === "FAILED";
   const isReview = status === "SPRINT_REVIEW";
-  const effective = isFailed || isReview ? "CODING" : status;
-  const currentIdx = TIMELINE.indexOf(
-    effective as Exclude<ProjectStatus, "FAILED" | "SPRINT_REVIEW">
-  );
+  // SPRINT_REVIEW: currentIdx past end = all steps shown as done
+  const effective = isReview ? null : isFailed ? "CODING" : status;
+  const currentIdx =
+    effective === null
+      ? TIMELINE.length
+      : TIMELINE.indexOf(
+          effective as Exclude<ProjectStatus, "FAILED" | "SPRINT_REVIEW">
+        );
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-start">
         {TIMELINE.map((step, idx) => {
           const done = idx < currentIdx;
-          const current = idx === currentIdx;
+          const current = idx === currentIdx && effective !== null;
           return (
             <Fragment key={step}>
               <div className="flex flex-col items-center gap-2 shrink-0">
@@ -171,16 +183,14 @@ function StatusTimeline({ status }: { status: ProjectStatus }) {
   );
 }
 
-function LogsPanel({
-  status,
-  logs
-}: {
-  status: ProjectStatus;
-  logs: LogEntry[];
-}) {
+function LogsPanel({ project, logs }: { project: Project; logs: LogEntry[] }) {
+  const { status } = project;
   const bottomRef = useRef<HTMLDivElement>(null);
   const isRunning =
-    status === "PLANNING" || status === "CODING" || status === "SPRINT_REVIEW";
+    status === "PLANNING" ||
+    status === "CODING" ||
+    status === "TESTING" ||
+    status === "SECURITY_SCAN";
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: needed for scroll
   useEffect(() => {
@@ -200,6 +210,28 @@ function LogsPanel({
 
       <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
         <StatusTimeline status={status} />
+
+        {status === "TESTING" && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground rounded-lg border bg-muted/30 px-4 py-3">
+            <Loader2 className="size-4 animate-spin shrink-0" />
+            <span className="animate-pulse">
+              Testing agent is writing tests...
+            </span>
+          </div>
+        )}
+
+        {status === "SECURITY_SCAN" && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground rounded-lg border bg-muted/30 px-4 py-3">
+            <Loader2 className="size-4 animate-spin shrink-0" />
+            <span className="animate-pulse">
+              Security agent is scanning code...
+            </span>
+          </div>
+        )}
+
+        {status === "SPRINT_REVIEW" && (
+          <SecuritySummaryPanel project={project} />
+        )}
 
         <div className="border-t" />
 
@@ -239,6 +271,185 @@ function LogsPanel({
         )}
       </div>
     </div>
+  );
+}
+
+function SecuritySummaryPanel({ project }: { project: Project }) {
+  const [showDetails, setShowDetails] = useState(false);
+  const parsed = ZSecurityReport.safeParse(
+    (project as unknown as Record<string, unknown>).lastSecurityReport
+  );
+  const hasReport = parsed.success;
+  const report = hasReport ? parsed.data : null;
+
+  const securityIcon = !report
+    ? "—"
+    : report.critical.length > 0
+      ? "🔴"
+      : report.warnings.length > 0
+        ? "⚠️"
+        : "✅";
+
+  const securityLabel = !report
+    ? "Security scan unavailable"
+    : report.critical.length > 0
+      ? `Security scan — ${report.critical.length} critical issue${report.critical.length !== 1 ? "s" : ""}`
+      : report.warnings.length > 0
+        ? `Security scan — ${report.warnings.length} warning${report.warnings.length !== 1 ? "s" : ""}`
+        : "Security scan — Clean";
+
+  const hasDetails =
+    report &&
+    (report.critical.length > 0 ||
+      report.warnings.length > 0 ||
+      report.info.length > 0);
+
+  return (
+    <div className="rounded-lg border bg-card p-4 flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2 text-sm">
+          <span>✅</span>
+          <span>Coding complete</span>
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <span>{hasReport ? "✅" : "—"}</span>
+          <span>{hasReport ? "Tests written" : "Testing unavailable"}</span>
+        </div>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 text-sm">
+            <span>{securityIcon}</span>
+            <span>{securityLabel}</span>
+          </div>
+          {report && report.critical.length > 0 && (
+            <div className="flex flex-col gap-0.5 pl-6">
+              {report.critical.map((item, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: static list
+                <p key={i} className="text-xs text-destructive">
+                  • {item}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {hasDetails && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowDetails((v) => !v)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ChevronDown
+              className={cn(
+                "size-3 transition-transform",
+                showDetails && "rotate-180"
+              )}
+            />
+            {showDetails ? "Hide details" : "View details"}
+          </button>
+          {showDetails && (
+            <div className="mt-3 flex flex-col gap-3">
+              {(report?.critical.length ?? 0) > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-destructive mb-1">
+                    Critical
+                  </p>
+                  {report?.critical.map((item, i) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: static list
+                    <p key={i} className="text-xs text-muted-foreground">
+                      • {item}
+                    </p>
+                  ))}
+                </div>
+              )}
+              {(report?.warnings.length ?? 0) > 0 && (
+                <div>
+                  <p className="text-xs font-medium mb-1">Warnings</p>
+                  {report?.warnings.map((item, i) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: static list
+                    <p key={i} className="text-xs text-muted-foreground">
+                      • {item}
+                    </p>
+                  ))}
+                </div>
+              )}
+              {(report?.info.length ?? 0) > 0 && (
+                <div>
+                  <p className="text-xs font-medium mb-1">Info</p>
+                  {report?.info.map((item, i) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: static list
+                    <p key={i} className="text-xs text-muted-foreground">
+                      • {item}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ApproveSprintButton({
+  project,
+  onApprove
+}: {
+  project: Project;
+  onApprove: () => void;
+}) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const parsed = ZSecurityReport.safeParse(
+    (project as unknown as Record<string, unknown>).lastSecurityReport
+  );
+  const criticalCount = parsed.success ? parsed.data.critical.length : 0;
+
+  if (criticalCount === 0) {
+    return (
+      <Button size="sm" onClick={onApprove}>
+        <Check className="size-3.5" />
+        Approve Sprint
+      </Button>
+    );
+  }
+
+  return (
+    <DialogRoot open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <DialogTrigger
+        render={
+          <Button size="sm">
+            <Check className="size-3.5" />
+            Approve Sprint
+          </Button>
+        }
+      />
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Approve with security issues?</DialogTitle>
+          <DialogDescription>
+            There {criticalCount === 1 ? "is" : "are"} {criticalCount} critical
+            security {criticalCount === 1 ? "issue" : "issues"} found. Are you
+            sure you want to approve?
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              onApprove();
+              setConfirmOpen(false);
+            }}
+          >
+            Approve anyway
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </DialogRoot>
   );
 }
 
@@ -672,7 +883,10 @@ function ChatPanel({
 
   const isJiraLinked = !!project.jiraProjectKey;
   const isRunning =
-    project.status === "PLANNING" || project.status === "CODING";
+    project.status === "PLANNING" ||
+    project.status === "CODING" ||
+    project.status === "TESTING" ||
+    project.status === "SECURITY_SCAN";
   const inputDisabled =
     isRunning ||
     project.status === "PLANNED" ||
@@ -774,10 +988,10 @@ function ChatPanel({
               {msg.action?.type === "sprint-review" &&
                 project.status === "SPRINT_REVIEW" && (
                   <div className="flex gap-2 flex-wrap">
-                    <Button size="sm" onClick={onApproveSprint}>
-                      <Check className="size-3.5" />
-                      Approve Sprint
-                    </Button>
+                    <ApproveSprintButton
+                      project={project}
+                      onApprove={onApproveSprint}
+                    />
                     <RejectDialog onReject={onRejectSprint} />
                   </div>
                 )}
@@ -928,6 +1142,21 @@ function getInitialMessages(project: Project): ChatMessage[] {
           isLoading: true
         })
       ];
+    case "TESTING":
+      return [
+        mk(
+          "Testing agent is running — writing unit tests for implemented tickets...",
+          {
+            isLoading: true
+          }
+        )
+      ];
+    case "SECURITY_SCAN":
+      return [
+        mk("Security agent is scanning the code for vulnerabilities...", {
+          isLoading: true
+        })
+      ];
     case "SPRINT_REVIEW":
       return [
         mk(
@@ -953,7 +1182,9 @@ function ProjectPage({ id }: { id: string }) {
     refetchInterval: (query) => {
       const data = query.state.data;
       if (!data) return false;
-      return data.status === "PLANNING" || data.status === "CODING"
+      return ["PLANNING", "CODING", "TESTING", "SECURITY_SCAN"].includes(
+        data.status
+      )
         ? 3000
         : false;
     }
@@ -1003,7 +1234,24 @@ function ProjectPage({ id }: { id: string }) {
     } else if (prev === "PLANNED" && project.status === "CODING") {
       addMsg("Coding agent is starting on your sprint...", { isLoading: true });
       addLog("Coding agent started.", "info");
+    } else if (prev === "CODING" && project.status === "TESTING") {
+      addMsg("Coding complete! Testing agent is writing unit tests...", {
+        isLoading: true
+      });
+      addLog("Coding complete. Testing agent started.", "success");
+    } else if (prev === "TESTING" && project.status === "SECURITY_SCAN") {
+      addMsg("Tests written! Security agent is scanning the code...", {
+        isLoading: true
+      });
+      addLog("Testing complete. Security scan started.", "success");
+    } else if (prev === "SECURITY_SCAN" && project.status === "SPRINT_REVIEW") {
+      addMsg(
+        "Sprint complete! Review the results in the right panel. Approve to continue, or reject a ticket with feedback.",
+        { action: { type: "sprint-review" } }
+      );
+      addLog("Security scan complete. Awaiting HIL review.", "success");
     } else if (prev === "CODING" && project.status === "SPRINT_REVIEW") {
+      // No-GitHub path: coding goes directly to sprint review
       addMsg(
         "Sprint complete! Review the implemented tickets on the Jira board. Approve to continue with the next sprint, or reject a ticket with feedback.",
         { action: { type: "sprint-review" } }
@@ -1267,7 +1515,7 @@ function ProjectPage({ id }: { id: string }) {
           />
         </div>
         <div className="flex w-1/2 flex-col overflow-hidden">
-          <LogsPanel status={project.status} logs={logs} />
+          <LogsPanel project={project} logs={logs} />
         </div>
       </div>
     </div>
