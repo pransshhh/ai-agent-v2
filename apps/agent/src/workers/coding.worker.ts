@@ -1,6 +1,6 @@
 import { createModel, generateText } from "@repo/ai";
 import { db } from "@repo/db";
-import { createGithubServices } from "@repo/github";
+import { createGithubServices, type GithubServices } from "@repo/github";
 import type { CodingJobPayload, TestingJobPayload } from "@repo/queue";
 import { createTestingQueue, QUEUE_NAMES } from "@repo/queue";
 import { Worker } from "bullmq";
@@ -23,6 +23,190 @@ function slugify(s: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 40);
+}
+
+type GenerateModel = ReturnType<typeof createModel>;
+
+async function fileExistsOnAnyBranch(
+  github: GithubServices,
+  owner: string,
+  repo: string,
+  path: string,
+  branches: string[]
+): Promise<boolean> {
+  for (const branch of branches) {
+    try {
+      await github.repo.getFileContent(owner, repo, path, branch);
+      return true;
+    } catch {
+      // not found on this branch
+    }
+  }
+  return false;
+}
+
+async function ensureCiAndEnvSample({
+  github,
+  owner,
+  repo,
+  baseBranch,
+  featureBranch,
+  repoContext,
+  completedSummary,
+  model,
+  runId
+}: {
+  github: GithubServices;
+  owner: string;
+  repo: string;
+  baseBranch: string;
+  featureBranch: string;
+  repoContext: string | null;
+  completedSummary: string;
+  model: GenerateModel;
+  runId: string;
+}) {
+  const branches = [baseBranch, featureBranch];
+
+  // ── .env.sample ────────────────────────────────────────────────────────────
+  const envSampleExists = await fileExistsOnAnyBranch(
+    github,
+    owner,
+    repo,
+    ".env.sample",
+    branches
+  );
+
+  if (!envSampleExists) {
+    logger.info({ runId }, "Generating .env.sample");
+
+    // Get file tree to scan for env var usage patterns
+    const tree = await github.repo.getRepoTree(owner, repo, featureBranch);
+    const filePaths = tree
+      .filter((e) => e.type === "blob")
+      .map((e) => e.path)
+      .join("\n");
+
+    const { text: envSample } = await generateText({
+      model,
+      prompt: `You are generating a .env.sample file for a software project.
+
+Based on the project context and file tree below, produce a .env.sample that:
+- Lists every environment variable the application is likely to use
+- Uses clear placeholder values (e.g. your_database_url_here, your_api_key_here)
+- Adds a short inline comment explaining each variable
+- Groups related variables with blank lines and section headers
+- NEVER includes real secrets or actual values
+
+IMPORTANT: This is .env.sample only. Never produce .env content.
+
+CONTEXT.md:
+${repoContext ?? "(no context available)"}
+
+File tree:
+${filePaths}
+
+Write only the .env.sample content. No code blocks or extra explanation.`
+    });
+
+    await github.repo.writeFile(
+      owner,
+      repo,
+      ".env.sample",
+      envSample,
+      "chore: add .env.sample",
+      featureBranch
+    );
+
+    logger.info({ runId }, "Wrote .env.sample to feature branch");
+  } else {
+    logger.info({ runId }, ".env.sample already exists — skipping");
+  }
+
+  // ── .github/workflows/ci.yml ───────────────────────────────────────────────
+  const ciExists = await fileExistsOnAnyBranch(
+    github,
+    owner,
+    repo,
+    ".github/workflows/ci.yml",
+    branches
+  );
+
+  if (!ciExists) {
+    logger.info({ runId }, "Generating .github/workflows/ci.yml");
+
+    const { text: ciContent } = await generateText({
+      model,
+      prompt: `You are generating a GitHub Actions CI/CD workflow file (.github/workflows/ci.yml) for a software project.
+
+Rules you MUST follow:
+1. NEVER reference or create a .env file. The project uses .env.sample for reference only.
+2. The deploy job MUST use these exact GitHub Actions secrets:
+   - \${{ secrets.EC2_HOST }}        — EC2 IP address
+   - \${{ secrets.EC2_USER }}        — SSH username (typically "ubuntu" for Ubuntu AMIs)
+   - \${{ secrets.EC2_SSH_KEY }}     — full contents of the .pem private key file
+   - \${{ secrets.EC2_DEPLOY_PATH }} — absolute deploy directory (e.g. /home/ubuntu/app)
+3. Use appleboy/ssh-action@v1.0.0 for the SSH deploy step.
+4. The deploy script block MUST run these steps in order:
+   a. Source nvm so node/npm/pnpm are available in the non-interactive SSH shell:
+        export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+   b. cd to \${{ secrets.EC2_DEPLOY_PATH }}
+   c. Fetch and hard-reset to remote so local changes (e.g. package-lock.json) never block the deploy:
+        git fetch origin ${baseBranch}
+        git reset --hard origin/${baseBranch}
+      (.env is gitignored so it is never touched by reset --hard)
+   d. Sync new env vars from .env.sample into .env (append missing keys only, never overwrite):
+        if [ -f .env.sample ]; then
+          touch .env
+          while IFS= read -r line; do
+            # skip blank lines and comments
+            [[ -z "$line" || "$line" == \\#* ]] && continue
+            key=$(echo "$line" | cut -d= -f1)
+            # only append if key not already present in .env
+            if ! grep -q "^\${key}=" .env 2>/dev/null; then
+              echo "$line" >> .env
+              echo "⚠️  New env var added (set real value): \${key}"
+            fi
+          done < .env.sample
+        fi
+   e. Install dependencies (detect from CONTEXT.md: npm ci / pnpm install / pip install -r requirements.txt / etc.)
+   f. Run build step if the project has one (e.g. npm run build)
+   g. Restart the app with PM2 using zero-downtime reload:
+        pm2 reload app --update-env || pm2 start <entrypoint> --name app
+      (the || handles the first-ever start when no PM2 process named "app" exists yet)
+   h. pm2 save
+5. Deploy ONLY runs on push to ${baseBranch} (after the CI job passes). Not on PRs.
+6. CI job runs on both push to ${baseBranch} AND pull_request targeting ${baseBranch}.
+7. Include a YAML comment block at the very top describing:
+   - What this project is (from CONTEXT.md)
+   - What was implemented in this sprint
+8. Output valid YAML only — no markdown fences, no extra explanation.
+
+CONTEXT.md:
+${repoContext ?? "(no context available)"}
+
+Sprint work completed this cycle:
+${completedSummary}
+
+Write only the .github/workflows/ci.yml YAML content.`
+    });
+
+    await github.repo.writeFile(
+      owner,
+      repo,
+      ".github/workflows/ci.yml",
+      ciContent,
+      "ci: add GitHub Actions CI/CD workflow",
+      featureBranch
+    );
+
+    logger.info({ runId }, "Wrote .github/workflows/ci.yml to feature branch");
+  } else {
+    logger.info(
+      { runId },
+      ".github/workflows/ci.yml already exists — skipping"
+    );
+  }
 }
 
 export function startCodingWorker() {
@@ -155,12 +339,27 @@ Write only the CONTEXT.md content (Markdown). Be concise but complete.`
 
             // Write the generated CONTEXT.md to the feature branch.
             // We create the branch first so we can write to it.
-            await github.repo.createBranch(
-              githubOwner,
-              githubRepo,
-              featureBranch as string,
-              baseBranch
-            );
+            // (Guard against retries where the branch already exists.)
+            try {
+              await github.repo.createBranch(
+                githubOwner,
+                githubRepo,
+                featureBranch as string,
+                baseBranch
+              );
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : String(err);
+              if (
+                !msg.includes("already exists") &&
+                !msg.includes("Reference already exists")
+              ) {
+                throw err;
+              }
+              logger.info(
+                { runId, featureBranch },
+                "Feature branch already exists (from prior run)"
+              );
+            }
 
             await github.repo.writeFile(
               githubOwner,
@@ -319,6 +518,19 @@ Write only the full updated CONTEXT.md content (Markdown).`
                 "PR already exists — new commits auto-update it"
               );
             } else {
+              // Generate CI workflow + .env.sample before opening the PR
+              await ensureCiAndEnvSample({
+                github,
+                owner: githubOwner,
+                repo: githubRepo,
+                baseBranch,
+                featureBranch,
+                repoContext: updatedContext,
+                completedSummary,
+                model,
+                runId
+              });
+
               const prUrl = await github.pr.createPullRequest(
                 githubOwner,
                 githubRepo,

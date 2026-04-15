@@ -48,12 +48,16 @@ export async function getFileContent(
   path: string,
   branch: string
 ): Promise<FileContent> {
-  const { data } = await octokit.repos.getContent({
-    owner,
-    repo,
-    path,
-    ref: branch
-  });
+  // Interpolate path directly into the URL so Octokit does not encode
+  // '/' as '%2F', which breaks nested paths like .github/workflows/ci.yml
+  const { data } = (await octokit.request(
+    `GET /repos/${owner}/${repo}/contents/${path}`,
+    { ref: branch }
+  )) as {
+    data:
+      | { type: string; content: string; sha: string; encoding: string }
+      | Array<unknown>;
+  };
 
   if (Array.isArray(data) || data.type !== "file") {
     throw new Error(`Path "${path}" is not a file`);
@@ -110,10 +114,9 @@ export async function writeFile(
     }
   }
 
-  await octokit.repos.createOrUpdateFileContents({
-    owner,
-    repo,
-    path,
+  // Interpolate path directly into the URL so Octokit does not encode
+  // '/' as '%2F', which breaks nested paths like .github/workflows/ci.yml
+  await octokit.request(`PUT /repos/${owner}/${repo}/contents/${path}`, {
     message,
     content: encodedContent,
     branch,
