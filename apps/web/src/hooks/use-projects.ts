@@ -156,3 +156,20 @@ export function useRejectPr(projectId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["projects", projectId] })
   });
 }
+
+export type CodelensScanResult = {
+  success: boolean;
+  projectKey: string;
+  issuesCount: number;
+  issuesData: Array<{ key: string; rule: string; severity: string }>;
+  report: string;
+};
+
+export function useCodelensScan(projectId: string) {
+  return useMutation<CodelensScanResult, Error>({
+    mutationFn: () =>
+      api
+        .post(`/api/v1/projects/${projectId}/codelens/scan`)
+        .then((r) => r.data)
+  });
+}

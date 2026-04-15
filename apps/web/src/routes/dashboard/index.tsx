@@ -2,7 +2,7 @@ import type { ProjectStatus } from "@repo/zod/project";
 import { ZCreateProjectRequest } from "@repo/zod/project";
 import { useForm } from "@tanstack/react-form";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { FolderOpen, Loader2, Plus, Trash2 } from "lucide-react";
+import { FolderOpen, Loader2, Plus, ScanSearch, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  type CodelensScanResult,
+  useCodelensScan,
   useCreateProject,
   useDeleteProject,
   useProjects
@@ -91,6 +93,121 @@ function DeleteProjectButton({ projectId }: { projectId: string }) {
         <Trash2 className="size-3.5" />
       )}
     </Button>
+  );
+}
+
+function parseSonarScore(report: string): number | null {
+  const match = report.match(/Overall SonarQube Score:\s*(\d+)/i);
+  return match ? Number(match[1]) : null;
+}
+
+function severityColor(severity: string) {
+  switch (severity.toUpperCase()) {
+    case "BLOCKER":
+      return "text-red-500";
+    case "CRITICAL":
+      return "text-orange-500";
+    case "MAJOR":
+      return "text-yellow-500";
+    case "MINOR":
+      return "text-blue-500";
+    default:
+      return "text-muted-foreground";
+  }
+}
+
+function CodelensScanButton({
+  projectId,
+  projectName,
+  hasGithub
+}: {
+  projectId: string;
+  projectName: string;
+  hasGithub: boolean;
+}) {
+  const [result, setResult] = useState<CodelensScanResult | null>(null);
+  const [open, setOpen] = useState(false);
+  const { mutate: scan, isPending } = useCodelensScan(projectId);
+
+  const handleScan = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    scan(undefined, {
+      onSuccess: (data) => {
+        setResult(data);
+        setOpen(true);
+      }
+    });
+  };
+
+  const score = result ? parseSonarScore(result.report) : null;
+
+  const severityCounts = result
+    ? result.issuesData.reduce<Record<string, number>>((acc, issue) => {
+        acc[issue.severity] = (acc[issue.severity] ?? 0) + 1;
+        return acc;
+      }, {})
+    : {};
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+        disabled={isPending || !hasGithub}
+        onClick={handleScan}
+        title={hasGithub ? "Run CodeLens scan" : "Connect GitHub to run a scan"}
+      >
+        {isPending ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : (
+          <ScanSearch className="size-3.5" />
+        )}
+      </Button>
+
+      <DialogRoot open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>CodeLens Scan — {projectName}</DialogTitle>
+            {result && (
+              <div className="flex items-center gap-3 mt-2 flex-wrap">
+                {score !== null && (
+                  <Badge
+                    variant={
+                      score >= 80
+                        ? "success"
+                        : score >= 60
+                          ? "warning"
+                          : "destructive"
+                    }
+                  >
+                    Score: {score}/100
+                  </Badge>
+                )}
+                <Badge variant="secondary">{result.issuesCount} issues</Badge>
+                {Object.entries(severityCounts).map(([sev, count]) => (
+                  <span
+                    key={sev}
+                    className={`text-xs font-medium ${severityColor(sev)}`}
+                  >
+                    {sev}: {count}
+                  </span>
+                ))}
+              </div>
+            )}
+          </DialogHeader>
+
+          {result && (
+            <div className="flex-1 overflow-auto min-h-0">
+              <pre className="text-xs leading-relaxed bg-muted rounded-md p-4 whitespace-pre-wrap font-mono">
+                {result.report}
+              </pre>
+            </div>
+          )}
+        </DialogContent>
+      </DialogRoot>
+    </>
   );
 }
 
@@ -304,6 +421,11 @@ export const Route = createFileRoute("/dashboard/")({
                               }
                             )}
                           </span>
+                          <CodelensScanButton
+                            projectId={project.id}
+                            projectName={project.name}
+                            hasGithub={Boolean(project.githubRepoUrl)}
+                          />
                           <DeleteProjectButton projectId={project.id} />
                         </div>
                       </CardContent>

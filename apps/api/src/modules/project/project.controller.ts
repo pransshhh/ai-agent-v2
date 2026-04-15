@@ -75,5 +75,11 @@ export const projectController = {
       res.locals.user.id
     );
     res.json(project);
+  },
+
+  async runCodelensScan(req: Request, res: Response) {
+    const { id } = req.params as ProjectParams;
+    const result = await projectService.runCodelensScan(id, res.locals.user.id);
+    res.json(result);
   }
 };

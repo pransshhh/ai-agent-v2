@@ -6,7 +6,7 @@ import type {
   UpdateProjectRequest
 } from "@repo/zod/project";
 import { env } from "../../config/env";
-import { encrypt } from "../../lib/crypto";
+import { decrypt, encrypt } from "../../lib/crypto";
 import { createDiscoveryJira } from "../../lib/jira";
 import { AppError } from "../../middleware/error";
 
@@ -147,5 +147,71 @@ export const projectService = {
       }
     });
     return toPublic(project);
+  },
+
+  async runCodelensScan(id: string, userId: string) {
+    const project = await projectService.getProject(id, userId);
+
+    if (!project.githubRepoUrl || !project.githubPat) {
+      throw new AppError(
+        "GitHub repo not connected",
+        400,
+        "GITHUB_NOT_CONNECTED"
+      );
+    }
+
+    const pat = decrypt(project.githubPat, env.GITHUB_PAT_SECRET);
+
+    const match = project.githubRepoUrl.match(
+      /github\.com\/([^/]+)\/([^/.\s]+?)(?:\.git)?$/
+    );
+    if (!match) {
+      throw new AppError("Invalid GitHub repo URL", 400, "INVALID_REPO_URL");
+    }
+    const [, owner, repo] = match;
+    const branch = project.githubBaseBranch ?? "main";
+
+    const zipResponse = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/zipball/${branch}`,
+      {
+        headers: {
+          Authorization: `Bearer ${pat}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28"
+        }
+      }
+    );
+
+    if (!zipResponse.ok) {
+      throw new AppError(
+        `Failed to download repo from GitHub (${zipResponse.status})`,
+        502,
+        "GITHUB_DOWNLOAD_FAILED"
+      );
+    }
+
+    const zipBuffer = await zipResponse.arrayBuffer();
+
+    const formData = new FormData();
+    formData.append(
+      "file",
+      new Blob([zipBuffer], { type: "application/zip" }),
+      `${repo}.zip`
+    );
+
+    const codeLensResponse = await fetch(`${env.CODELENS_API_URL}/api/upload`, {
+      method: "POST",
+      body: formData
+    });
+
+    if (!codeLensResponse.ok) {
+      throw new AppError(
+        `CodeLens scan failed (${codeLensResponse.status})`,
+        502,
+        "CODELENS_SCAN_FAILED"
+      );
+    }
+
+    return codeLensResponse.json();
   }
 };

@@ -72,6 +72,12 @@ projectRouter.delete(
 );
 
 projectRouter.post(
+  "/:id/codelens/scan",
+  validate({ params: ZProjectIdParam }),
+  projectController.runCodelensScan
+);
+
+projectRouter.post(
   "/:id/agent/planning/start",
   validate({ params: ZProjectIdParam, body: ZStartPlanningRequest }),
   agentController.startPlanning

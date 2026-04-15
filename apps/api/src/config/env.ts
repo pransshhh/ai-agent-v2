@@ -20,7 +20,8 @@ const envSchema = z.object({
   REDIS_URL: z.url(),
   GITHUB_PAT_SECRET: z
     .string()
-    .min(16, "GITHUB_PAT_SECRET must be at least 16 characters")
+    .min(16, "GITHUB_PAT_SECRET must be at least 16 characters"),
+  CODELENS_API_URL: z.string().min(1)
 });
 
 const { success, data, error } = envSchema.safeParse(process.env);
