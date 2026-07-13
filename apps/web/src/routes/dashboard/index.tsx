@@ -50,6 +50,8 @@ const STATUS_CONFIG: Record<
   PLANNING: { label: "Planning", variant: "warning" },
   PLANNED: { label: "Planned", variant: "purple" },
   CODING: { label: "Coding", variant: "info" },
+  TESTING: { label: "Testing", variant: "info" },
+  SECURITY_SCAN: { label: "Security Scan", variant: "warning" },
   SPRINT_REVIEW: { label: "Sprint Review", variant: "success" },
   FAILED: { label: "Failed", variant: "destructive" }
 };
