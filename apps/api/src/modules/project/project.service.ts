@@ -121,7 +121,7 @@ export const projectService = {
   async connectGithub(id: string, userId: string, input: ConnectGithubRequest) {
     await projectService.getProject(id, userId);
 
-    const encryptedPat = encrypt(input.pat, env.GITHUB_PAT_SECRET);
+    const encryptedPat = encrypt(input.pat, env.GITHUB_PAT_ENCRYPTION_KEY);
 
     const project = await db.project.update({
       where: { id },
@@ -160,7 +160,7 @@ export const projectService = {
       );
     }
 
-    const pat = decrypt(project.githubPat, env.GITHUB_PAT_SECRET);
+    const pat = decrypt(project.githubPat, env.GITHUB_PAT_ENCRYPTION_KEY);
 
     const match = project.githubRepoUrl.match(
       /github\.com\/([^/]+)\/([^/.\s]+?)(?:\.git)?$/

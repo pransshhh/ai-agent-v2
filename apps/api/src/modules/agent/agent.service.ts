@@ -130,7 +130,10 @@ export const agentService = {
     });
 
     const codingRunId = crypto.randomUUID();
-    const decryptedPat = decrypt(project.githubPat, env.GITHUB_PAT_SECRET);
+    const decryptedPat = decrypt(
+      project.githubPat,
+      env.GITHUB_PAT_ENCRYPTION_KEY
+    );
 
     await db.project.update({
       where: { id: projectId },
@@ -326,7 +329,7 @@ export const agentService = {
 
     const codingRunId = crypto.randomUUID();
     const decryptedPat = project.githubPat
-      ? decrypt(project.githubPat, env.GITHUB_PAT_SECRET)
+      ? decrypt(project.githubPat, env.GITHUB_PAT_ENCRYPTION_KEY)
       : undefined;
 
     await db.project.update({
@@ -392,7 +395,10 @@ export const agentService = {
       );
     }
 
-    const decryptedPat = decrypt(project.githubPat, env.GITHUB_PAT_SECRET);
+    const decryptedPat = decrypt(
+      project.githubPat,
+      env.GITHUB_PAT_ENCRYPTION_KEY
+    );
     const featureBranch = `feature/${project.jiraSprintId}-${slugify(projectId)}`;
     const codingRunId = crypto.randomUUID();
 

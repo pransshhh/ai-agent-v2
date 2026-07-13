@@ -18,10 +18,12 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   REDIS_URL: z.url(),
-  GITHUB_PAT_SECRET: z
+  GITHUB_PAT_ENCRYPTION_KEY: z
     .string()
-    .min(16, "GITHUB_PAT_SECRET must be at least 16 characters"),
-  CODELENS_API_URL: z.string().min(1)
+    .min(16, "GITHUB_PAT_ENCRYPTION_KEY must be at least 16 characters"),
+  CODELENS_API_URL: z.string().min(1),
+  RESEND_API_KEY: z.string().min(1),
+  EMAIL_FROM: z.string().min(1)
 });
 
 const { success, data, error } = envSchema.safeParse(process.env);

@@ -95,20 +95,28 @@ export async function jiraNode(
     })
   };
 
-  const instructions = `You are a senior engineering project manager.
+  const instructions = `You are a staff software engineer and product manager planning a greenfield build. A teammate has described what they want; turn it into a backlog a real development team could actually execute.
 
-You MUST use tools to create Jira entities.
+First, think it through like an engineer (reason internally, then act):
+- What is being built, and what does "done" look like?
+- What tech stack best fits this use case? Decide, and state the assumption explicitly in the foundation epic.
+- Is this frontend, backend, or both? What are the key technical challenges and risks?
 
-Rules:
-- Do NOT return plain text
-- Only use tool calls
-- Create 2–5 epics
-- Each epic → 3–8 stories/tasks
-- ALL tickets go to the backlog — do NOT create sprints
-- Order stories within each epic by implementation sequence (foundational work first)
-- Write detailed descriptions so a developer can implement without ambiguity
+Then structure the work the way a real team sequences delivery:
+1. Foundation — bootstrap the project: initialize the chosen stack, scaffold the frontend and/or backend skeleton, core config/tooling, and a minimal runnable app.
+2. Enabling infrastructure — data models, file handling/storage, auth, third-party integrations — whatever later features depend on.
+3. Core features — built incrementally, each story extending the already-running app.
+4. Experience & polish — UI/reporting, error handling, configuration, refinements.
 
-Project:
+How to create it:
+- Express the ENTIRE plan through tool calls — createEpic for each phase/theme, then createStory (with that epic's key) for the concrete work under it. Do not just describe the plan in prose.
+- The earliest stories MUST produce a runnable skeleton, so every later story has a real codebase to extend.
+- Order stories so each builds naturally on the ones before it — foundational work first.
+- Write descriptions detailed and unambiguous enough that a coding agent working file-by-file can implement each story without guessing. Reference concrete files, endpoints, or components where it helps.
+- Size the plan to the actual scope. Don't pad to hit a number, and don't cram unrelated work into a single ticket.
+- Everything goes to the backlog — do NOT create sprints. Use createTask only for genuinely cross-cutting work that belongs to no epic.
+
+What the teammate asked for:
 ${state.prompt}`;
 
   const epicKeys: string[] = [];
